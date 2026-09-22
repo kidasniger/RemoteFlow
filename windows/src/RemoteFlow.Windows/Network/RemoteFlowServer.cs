@@ -7,6 +7,7 @@ using RemoteFlow.Windows.Security;
 using RemoteFlow.Windows.Input;
 using RemoteFlow.Windows.Screen;
 using RemoteFlow.Windows.Files;
+using RemoteFlow.Windows.Macros;
 
 namespace RemoteFlow.Windows.Network;
 
@@ -18,6 +19,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     private readonly PairingManager _pairing;
     private readonly FileTransferManager _files;
     private readonly ClipboardSyncManager _clipboard;
+    private readonly MacroManager _macros;
     private readonly List<ClipboardSession> _clipboardSessions = new();
     private readonly List<ConnectedClient> _connectedClients = new();
     private TcpListener? _listener;
@@ -38,11 +40,50 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         _pairing = pairing;
         _files = new FileTransferManager();
         _clipboard = new ClipboardSyncManager();
+        _macros = new MacroManager();
         _clipboard.Changed += Clipboard_Changed;
         _files.TransferStatusChanged += Files_TransferStatusChanged;
     }
 
     public string FilesRootPath => _files.RootPath;
+
+    public IReadOnlyList<RemoteFlowMacro> ListMacros() => _macros.List();
+
+    public RemoteFlowMacro SaveMacro(
+        string? id,
+        string name,
+        IEnumerable<RemoteFlowMacroStep> steps) =>
+        _macros.Save(id, name, steps);
+
+    public void DeleteMacro(string id) => _macros.Delete(id);
+
+    public async Task<(bool Ok, string? Error, string? Summary)> RunMacroAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return (false, "Identifiant de macro manquant.", null);
+
+        try
+        {
+            await _macros.ExecuteAsync(id, cancellationToken);
+            var macro = _macros.List().FirstOrDefault(x => x.Id == id);
+            var summary = macro is null
+                ? "Macro terminée."
+                : $"Macro « {macro.Name} » terminée.";
+            StatusChanged?.Invoke(this, summary);
+            return (true, null, summary);
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, "Exécution de la macro annulée.", null);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || ex is KeyNotFoundException)
+        {
+            return (false, ex.Message, null);
+        }
+    }
+
 
     public IReadOnlyList<RemoteFlowFileInfo> ListLocalFiles() => _files.ListFiles();
 
@@ -379,6 +420,87 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                             Event: "ack",
                             Ok: true,
                             Action: "clipboard",
+                            Paired: sessionPaired),
+                        cancellationToken);
+                    return;
+                }
+
+                if (string.Equals(message.Action, "macro", StringComparison.OrdinalIgnoreCase))
+                {
+                    var macroType = message.Type?.Trim().ToUpperInvariant();
+
+                    if (macroType == "LIST")
+                    {
+                        var macroList = _macros.List()
+                            .Select(x => new RemoteFlowMacroInfo(
+                                x.Id,
+                                x.Name,
+                                x.StepCount,
+                                x.UpdatedAtUtc))
+                            .ToArray();
+
+                        await session.SendAsync(
+                            new RemoteFlowMacroList(
+                                Event: "macro_list",
+                                Macros: macroList),
+                            cancellationToken);
+                        return;
+                    }
+
+                    if (macroType is "RUN" or null)
+                    {
+                        var macroId = message.Id ?? message.Cmd;
+                        if (string.IsNullOrWhiteSpace(macroId))
+                        {
+                            await session.SendAsync(
+                                new RemoteFlowAck(
+                                    Event: "ack",
+                                    Ok: false,
+                                    Action: "macro",
+                                    Error: "Identifiant de macro manquant.",
+                                    Paired: sessionPaired),
+                                cancellationToken);
+                            return;
+                        }
+
+                        var runResult = await RunMacroAsync(macroId, cancellationToken);
+                        if (!runResult.Ok)
+                        {
+                            await session.SendAsync(
+                                new RemoteFlowAck(
+                                    Event: "ack",
+                                    Ok: false,
+                                    Action: "macro",
+                                    Error: runResult.Error,
+                                    Paired: sessionPaired),
+                                cancellationToken);
+                            return;
+                        }
+
+                        MessageReceived?.Invoke(
+                            this,
+                            new RemoteFlowServerEvent(
+                                "macro",
+                                "RUN",
+                                runResult.Summary,
+                                DateTimeOffset.UtcNow));
+
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: true,
+                                Action: "macro",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: false,
+                            Action: "macro",
+                            Error: $"Commande macro non prise en charge : {macroType ?? "(vide)"}",
                             Paired: sessionPaired),
                         cancellationToken);
                     return;

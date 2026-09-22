@@ -435,6 +435,196 @@
                     </Border>
                 </Grid>
 
+
+                <Grid x:Name="MacrosView" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="310"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Card}" Grid.Column="0" Margin="0,0,14,0">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top">
+                                <TextBlock Text="Macros enregistrées" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="MacrosCountText"
+                                           Text="0 macro"
+                                           Foreground="#94A3B8"
+                                           Margin="0,5,0,10"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Nouvelle" Click="NewMacro_Click" Padding="12,7"/>
+                                    <Button Content="Actualiser" Click="RefreshMacros_Click" Padding="12,7" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <ListView x:Name="MacrosList"
+                                      Margin="0,14,0,0"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      Foreground="#E2E8F0"
+                                      SelectionMode="Single"
+                                      SelectionChanged="MacrosList_SelectionChanged">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="8,10">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding StepCount, StringFormat={}{0} étape(s)}"
+                                                           Foreground="#64748B"
+                                                           FontSize="11"
+                                                           Margin="0,4,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </DockPanel>
+                    </Border>
+
+                    <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Style="{StaticResource Card}" Grid.Row="0" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="Nom de la macro" FontSize="11" Foreground="#64748B"/>
+                                    <TextBox x:Name="MacroNameTextBox"
+                                             MinWidth="260"
+                                             FontSize="16"
+                                             Padding="8,6"
+                                             Margin="0,4,0,0"/>
+                                </StackPanel>
+
+                                <Button Grid.Column="1"
+                                        Content="Enregistrer"
+                                        Click="SaveMacro_Click"
+                                        Padding="14,8"
+                                        Margin="12,20,0,0"/>
+                                <Button Grid.Column="2"
+                                        Content="Exécuter"
+                                        Click="RunMacro_Click"
+                                        Padding="14,8"
+                                        Margin="8,20,0,0"/>
+                                <Button Grid.Column="3"
+                                        Content="Supprimer"
+                                        Click="DeleteMacro_Click"
+                                        Padding="14,8"
+                                        Margin="8,20,0,0"/>
+                                <Button Grid.Column="4"
+                                        Content="Arrêter"
+                                        Click="StopMacro_Click"
+                                        Padding="14,8"
+                                        Margin="8,20,0,0"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Grid.Row="1" Padding="10">
+                            <DockPanel>
+                                <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="145"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="115"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Type" FontSize="10" Foreground="#64748B"/>
+                                        <ComboBox x:Name="MacroStepTypeCombo" SelectedIndex="0" Margin="0,4,8,0">
+                                            <ComboBoxItem Content="TOUCHE"/>
+                                            <ComboBoxItem Content="RACCOURCI"/>
+                                            <ComboBoxItem Content="TEXTE"/>
+                                            <ComboBoxItem Content="SOURIS"/>
+                                            <ComboBoxItem Content="ATTENTE"/>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Valeur" FontSize="10" Foreground="#64748B"/>
+                                        <TextBox x:Name="MacroStepValueTextBox"
+                                                 Margin="0,4,8,0"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="Wrap"
+                                                 ToolTip="TOUCHE/RACCOURCI : CTRL+S • TEXTE : contenu • SOURIS : LEFT_CLICK ou MOVE:0.5,0.5 • ATTENTE : millisecondes"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Pause après (ms)" FontSize="10" Foreground="#64748B"/>
+                                        <TextBox x:Name="MacroStepDelayTextBox"
+                                                 Text="0"
+                                                 Margin="0,4,8,0"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="3"
+                                            Content="Ajouter"
+                                            Click="AddMacroStep_Click"
+                                            Padding="12,7"
+                                            VerticalAlignment="Bottom"/>
+                                </Grid>
+
+                                <ListBox x:Name="MacroStepsList"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Foreground="#E2E8F0"
+                                         SelectionMode="Single">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#020617"
+                                                    BorderBrush="#1E293B"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8"
+                                                    Padding="10"
+                                                    Margin="0,0,0,7">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap"/>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding DelayMs, StringFormat={}Pause: {0} ms}"
+                                                               Foreground="#64748B"
+                                                               Margin="12,0,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button Content="Monter" Click="MoveMacroStepUp_Click" Padding="12,7"/>
+                                    <Button Content="Descendre" Click="MoveMacroStepDown_Click" Padding="12,7" Margin="8,0,0,0"/>
+                                    <Button Content="Supprimer l’étape"
+                                            Click="RemoveMacroStep_Click"
+                                            Padding="12,7"
+                                            Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Grid.Row="2" Margin="0,14,0,0" Padding="12">
+                            <StackPanel>
+                                <TextBlock Text="Actions autorisées" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock Text="Clavier, raccourcis, texte, souris et délais uniquement. Aucun lancement de programme ou commande shell n’est exécuté par les macros."
+                                           Foreground="#94A3B8"
+                                           TextWrapping="Wrap"
+                                           Margin="0,5,0,0"/>
+                                <TextBlock x:Name="MacroRunStatus"
+                                           Text="Sélectionnez une macro ou créez-en une nouvelle."
+                                           Foreground="#22D3EE"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
                 <StackPanel x:Name="PlaceholderView" Visibility="Collapsed">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>

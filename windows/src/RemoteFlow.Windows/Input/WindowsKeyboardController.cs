@@ -210,6 +210,73 @@ public static class WindowsKeyboardController
         };
     }
 
+
+    public static bool PressChord(string? chord)
+    {
+        var parts = (chord ?? string.Empty)
+            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (parts.Length == 0)
+            return false;
+        if (parts.Length == 1)
+            return PressLabel(parts[0]);
+
+        var modifiers = new List<ushort>();
+        for (var i = 0; i < parts.Length - 1; i++)
+        {
+            if (!TryResolveModifier(parts[i], out var modifier))
+                return false;
+            if (!modifiers.Contains(modifier))
+                modifiers.Add(modifier);
+        }
+
+        if (!TryResolveVirtualKey(parts[^1], out var mainKey))
+            return false;
+
+        var inputs = new List<INPUT>(modifiers.Count * 2 + 2);
+        foreach (var modifier in modifiers)
+            inputs.Add(CreateVirtualKeyInput(modifier, 0));
+
+        inputs.Add(CreateVirtualKeyInput(mainKey, 0));
+        inputs.Add(CreateVirtualKeyInput(mainKey, KEYEVENTF_KEYUP));
+
+        for (var i = modifiers.Count - 1; i >= 0; i--)
+            inputs.Add(CreateVirtualKeyInput(modifiers[i], KEYEVENTF_KEYUP));
+
+        return Send(inputs.ToArray());
+    }
+
+    public static bool TypeText(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return true;
+
+        foreach (var character in text)
+        {
+            if (!SendUnicode(character))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryResolveModifier(string label, out ushort virtualKey) =>
+        label.Trim().ToUpperInvariant() switch
+        {
+            "SHIFT" => TrySet(out virtualKey, VK_SHIFT),
+            "CTRL" or "CONTROL" => TrySet(out virtualKey, VK_CONTROL),
+            "ALT" or "OPTION" => TrySet(out virtualKey, VK_MENU),
+            "WIN" or "WINDOWS" or "META" or "CMD" => TrySet(out virtualKey, VK_LWIN),
+            "RWIN" => TrySet(out virtualKey, VK_RWIN),
+            _ => TrySet(out virtualKey, 0)
+        };
+
+    private static bool TrySet(out ushort value, ushort candidate)
+    {
+        value = candidate;
+        return candidate != 0;
+    }
+
     private static bool Send(INPUT[] inputs) =>
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>()) == inputs.Length;
 }

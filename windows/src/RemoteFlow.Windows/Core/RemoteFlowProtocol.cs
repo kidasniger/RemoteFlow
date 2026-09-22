@@ -141,3 +141,13 @@ public sealed record RemoteFlowClipboardUpdate(
     string Text,
     string Source,
     long Timestamp);
+
+public sealed record RemoteFlowMacroInfo(
+    string Id,
+    string Name,
+    int StepCount,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record RemoteFlowMacroList(
+    string Event,
+    IReadOnlyList<RemoteFlowMacroInfo> Macros);
