@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Code
@@ -280,7 +281,7 @@ private fun getMacroIcon(type: MacroIconType): ImageVector {
         MacroIconType.POWER -> Icons.Default.PowerSettingsNew
         MacroIconType.LOCK -> Icons.Default.Lock
         MacroIconType.PLAY -> Icons.Default.PlayArrow
-        MacroIconType.MUTE -> Icons.Default.VolumeOff
+        MacroIconType.MUTE -> Icons.AutoMirrored.Filled.VolumeOff
         MacroIconType.SCRIPT -> Icons.Default.Code
         MacroIconType.CAPTURE -> Icons.Default.CameraAlt
         MacroIconType.BROWSER -> Icons.Default.Language
