@@ -49,3 +49,14 @@ Le verrouillage est volontairement **désactivé par défaut** dans cette phase 
 Cette phase ne prétend pas fournir un tunnel chiffré de bout en bout avec l'Android actuel : celui-ci ouvre encore un socket TCP et marque la session comme chiffrée sans négocier de TLS/clé de session. Windows prépare l'identité, le PIN, la signature de hello et le contrôle d'accès pour la prochaine évolution coordonnée du protocole.
 
 Les actions reçues restent journalisées et accusées réception ; leur exécution système sera branchée dans les phases fonctionnelles suivantes.
+
+
+## Phase 5 — Souris + clavier
+
+Les actions `mouse` et `keyboard` sont maintenant exécutées réellement par Windows via `user32.dll` / `SendInput`.
+
+La souris accepte `MOVE`, `MOVE_RELATIVE`, `LEFT_CLICK`, `RIGHT_CLICK`, `DOUBLE_CLICK`, `SCROLL_UP` et `SCROLL_DOWN`. Les coordonnées `x/y` sont normalisées de 0 à 1 sur le bureau virtuel Windows.
+
+Le clavier exécute les caractères simples et les touches système courantes : Ctrl, Alt, Shift, Windows, Entrée, Échap, Tab, Espace, flèches, Home/End, PageUp/PageDown, Insert/Delete, CapsLock et F1–F12.
+
+Les entrées sont injectées avec `SendInput` dans la fenêtre actuellement au premier plan. Les autres actions restent en contrat/ACK et seront implémentées dans leurs phases respectives.

@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Security;
+using RemoteFlow.Windows.Input;
 
 namespace RemoteFlow.Windows.Network;
 
@@ -168,7 +169,21 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                     return;
                 }
 
-                var summary = BuildSummary(message);
+                var execution = ExecuteAction(message);
+                if (!execution.ok)
+                {
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: false,
+                            Action: message.Action,
+                            Error: execution.error,
+                            Paired: sessionPaired),
+                        cancellationToken);
+                    return;
+                }
+
+                var summary = execution.summary ?? BuildSummary(message);
                 MessageReceived?.Invoke(
                     this,
                     new RemoteFlowServerEvent(
@@ -213,6 +228,33 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                 PinLength: security.PinLength,
                 Security: security.Security),
             cancellationToken);
+    }
+
+    private static (bool ok, string? summary, string? error) ExecuteAction(RemoteFlowMessage message)
+    {
+        return message.Action?.Trim().ToLowerInvariant() switch
+        {
+            "mouse" => ExecuteMouse(message),
+            "keyboard" => ExecuteKeyboard(message),
+            _ => (true, null, null)
+        };
+    }
+
+    private static (bool ok, string? summary, string? error) ExecuteMouse(RemoteFlowMessage message)
+    {
+        var type = message.Type?.Trim().ToUpperInvariant();
+        if (!WindowsMouseController.Execute(type, message.X, message.Y, message.Dx, message.Dy))
+            return (false, null, $"Commande souris non prise en charge : {type ?? "(vide)"}");
+
+        return (true, BuildSummary(message), null);
+    }
+
+    private static (bool ok, string? summary, string? error) ExecuteKeyboard(RemoteFlowMessage message)
+    {
+        if (!WindowsKeyboardController.PressLabel(message.Key, message.Special == true, message.Modifier == true))
+            return (false, null, $"Touche clavier non reconnue : {message.Key ?? "(vide)"}");
+
+        return (true, BuildSummary(message), null);
     }
 
     private static string BuildSummary(RemoteFlowMessage message)
