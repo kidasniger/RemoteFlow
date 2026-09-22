@@ -219,3 +219,15 @@ Le journal est limité à 500 entrées et couvre les connexions/déconnexions, c
 Le contenu du presse-papiers n'est jamais enregistré : seuls l'état et les métadonnées de synchronisation sont journalisés.
 
 La page permet le filtrage par catégorie, l'effacement du journal et l'export CSV.
+
+## Phase 18 — Finition de l'interface Windows
+
+La version native WPF bénéficie maintenant d'une finition d'utilisation quotidienne :
+- rendu plus net avec arrondi d'alignement et pixels ;
+- navigation latérale défilable sur les petites hauteurs de fenêtre ;
+- contenu principal défilable verticalement pour éviter les éléments coupés lors du redimensionnement ;
+- style cohérent des boutons avec états survolé, pressé, focus clavier et désactivé ;
+- indicateur visuel de l'état du serveur/connexion ;
+- affichage automatique de la version RemoteFlow dans la barre d'état.
+
+Aucune modification Android n'est requise pour cette phase.

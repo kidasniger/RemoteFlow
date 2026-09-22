@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        VersionText.Text = $"RemoteFlow Windows • v{_core.Version}";
         _core.StateChanged += Core_StateChanged;
         _core.Server.StatusChanged += Server_StatusChanged;
         _core.Server.ClipboardStatusChanged += Server_ClipboardStatusChanged;
@@ -82,11 +83,11 @@ public partial class MainWindow : Window
         {
             await _core.StartServerAsync();
             RefreshPairingUi();
-            ConnectionStatus.Text = $"Serveur TCP • port {_core.PairingPort}";
+            SetConnectionStatus($"Serveur TCP • port {_core.PairingPort}");
         }
         catch (Exception ex)
         {
-            ConnectionStatus.Text = $"Serveur indisponible • {ex.Message}";
+            SetConnectionStatus($"Serveur indisponible • {ex.Message}");
         }
     }
 
@@ -106,6 +107,16 @@ public partial class MainWindow : Window
         DashboardPairingPin.Text = $"PIN : {_core.Pairing.CurrentPin}";
     }
 
+    private void SetConnectionStatus(string text)
+    {
+        ConnectionStatus.Text = text;
+        ConnectionStatusDot.Fill = !_core.Server.IsRunning
+            ? Brushes.OrangeRed
+            : _core.State == ConnectionState.Connected
+                ? Brushes.LimeGreen
+                : Brushes.DeepSkyBlue;
+    }
+
     private void Server_StatusChanged(object? sender, string status)
     {
         AddActivity(
@@ -115,7 +126,7 @@ public partial class MainWindow : Window
                 : "Serveur",
             "Windows",
             status);
-        Dispatcher.Invoke(() => ConnectionStatus.Text = status);
+        Dispatcher.Invoke(() => SetConnectionStatus(status));
     }
 
     private void Server_ClipboardStatusChanged(object? sender, string status)
@@ -215,9 +226,9 @@ public partial class MainWindow : Window
         Dispatcher.Invoke(() =>
         {
             if (state == ConnectionState.Connected)
-                ConnectionStatus.Text = "Android connecté";
+                SetConnectionStatus("Android connecté");
             else if (state == ConnectionState.Disconnected && _core.Server.IsRunning)
-                ConnectionStatus.Text = $"Serveur TCP • port {_core.PairingPort}";
+                SetConnectionStatus($"Serveur TCP • port {_core.PairingPort}");
         });
     }
 
@@ -1598,14 +1609,14 @@ public partial class MainWindow : Window
     private void CopyPairingAddress_Click(object sender, RoutedEventArgs e)
     {
         System.Windows.Clipboard.SetText(_core.Pairing.CreateQrPayload(_core.PairingPort));
-        ConnectionStatus.Text = "Adresse d'appairage copiée";
+        SetConnectionStatus("Adresse d'appairage copiée");
     }
 
     private void RegeneratePin_Click(object sender, RoutedEventArgs e)
     {
         _core.Pairing.RegeneratePin();
         RefreshPairingUi();
-        ConnectionStatus.Text = "Nouveau PIN généré et protégé";
+        SetConnectionStatus("Nouveau PIN généré et protégé");
     }
 
     private void TogglePairingEnforcement_Click(object sender, RoutedEventArgs e)
@@ -1613,9 +1624,9 @@ public partial class MainWindow : Window
         var next = !_core.Pairing.PairingEnforced;
         _core.Pairing.SetPairingEnforced(next);
         RefreshPairingUi();
-        ConnectionStatus.Text = next
+        SetConnectionStatus(next
             ? "Verrouillage par appairage activé"
-            : "Verrouillage par appairage désactivé";
+            : "Verrouillage par appairage désactivé");
     }
 
     private async void MainWindow_Closed(object? sender, EventArgs e)

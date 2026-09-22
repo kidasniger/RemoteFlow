@@ -8,7 +8,10 @@
         MinHeight="650"
         WindowStartupLocation="CenterScreen"
         Background="#020617"
-        Foreground="#F8FAFC">
+        Foreground="#F8FAFC"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display">
     <Window.Resources>
         <Style x:Key="NavButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -17,6 +20,49 @@
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Padding" Value="14,11"/>
             <Setter Property="Margin" Value="0,0,0,3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#172554"/>
+                    <Setter Property="Foreground" Value="#F8FAFC"/>
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="Background" Value="#172554"/>
+                    <Setter Property="BorderBrush" Value="#2563EB"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#1E3A8A"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#273449"/>
+                    <Setter Property="BorderBrush" Value="#475569"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#334155"/>
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#22D3EE"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45"/>
+                    <Setter Property="Cursor" Value="Arrow"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="#0F172A"/>
@@ -38,7 +84,8 @@
                 BorderBrush="#1E293B"
                 BorderThickness="0,0,1,0">
             <DockPanel Margin="16">
-                <StackPanel DockPanel.Dock="Top">
+                <ScrollViewer DockPanel.Dock="Top" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="4,5,4,25">
                         <Border Width="40" Height="40" CornerRadius="10" Background="#2563EB">
                             <TextBlock Text="RF" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
@@ -61,6 +108,7 @@
                     <Button Style="{StaticResource NavButton}" Click="ActivityLog_Click" Content="☷   Activité"/>
                     <Button Style="{StaticResource NavButton}" Click="Settings_Click" Content="⚙   Paramètres"/>
                 </StackPanel>
+            </ScrollViewer>
 
                 <Border DockPanel.Dock="Bottom"
                         Background="#0F172A"
@@ -71,9 +119,10 @@
                     <StackPanel>
                         <TextBlock Text="État" FontSize="11" Foreground="#94A3B8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                            <Ellipse Width="8" Height="8" Fill="#34D399"/>
-                            <TextBlock x:Name="ConnectionStatus" Text="Prêt" Margin="7,0,0,0" FontSize="12"/>
+                            <Ellipse x:Name="ConnectionStatusDot" Width="8" Height="8" Fill="#22D3EE"/>
+                            <TextBlock x:Name="ConnectionStatus" Text="Prêt" Margin="7,0,0,0" FontSize="12" TextWrapping="Wrap"/>
                         </StackPanel>
+                        <TextBlock x:Name="VersionText" Text="RemoteFlow Windows • v1.0.0" Foreground="#64748B" FontSize="10" Margin="0,10,0,0"/>
                     </StackPanel>
                 </Border>
             </DockPanel>
@@ -94,7 +143,8 @@
                            Margin="0,6,0,0"/>
             </StackPanel>
 
-            <Grid Grid.Row="1">
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+                <Grid>
                 <Grid x:Name="DashboardView">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -1030,6 +1080,7 @@
                     </Border>
                 </StackPanel>
             </Grid>
+            </ScrollViewer>
         </Grid>
     </Grid>
 </Window>
