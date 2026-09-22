@@ -135,7 +135,7 @@ public partial class MainWindow : Window
 
     private void CopyPairingAddress_Click(object sender, RoutedEventArgs e)
     {
-        Clipboard.SetText(_core.Pairing.CreateQrPayload(_core.PairingPort));
+        System.Windows.Clipboard.SetText(_core.Pairing.CreateQrPayload(_core.PairingPort));
         ConnectionStatus.Text = "Adresse d'appairage copiée";
     }
 

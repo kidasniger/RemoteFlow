@@ -229,15 +229,15 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                         return;
                     }
 
-                    var summary = $"Presse-papiers Android → Windows ({clipboardText.Length:N0} caractères)";
+                    var clipboardSummary = $"Presse-papiers Android → Windows ({clipboardText.Length:N0} caractères)";
                     MessageReceived?.Invoke(
                         this,
                         new RemoteFlowServerEvent(
                             "clipboard",
                             null,
-                            summary,
+                            clipboardSummary,
                             DateTimeOffset.UtcNow));
-                    ClipboardStatusChanged?.Invoke(this, summary);
+                    ClipboardStatusChanged?.Invoke(this, clipboardSummary);
 
                     await session.SendAsync(
                         new RemoteFlowAck(
