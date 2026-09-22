@@ -55,6 +55,7 @@
                     <Button Style="{StaticResource NavButton}" Click="Files_Click" Content="▤   Fichiers"/>
                     <Button Style="{StaticResource NavButton}" Click="Screens_Click" Content="▦   Multi-écrans"/>
                     <Button Style="{StaticResource NavButton}" Click="Macros_Click" Content="⌘   Macros"/>
+                    <Button Style="{StaticResource NavButton}" Click="Whiteboard_Click" Content="✎   Tableau blanc"/>
                     <Button Style="{StaticResource NavButton}" Click="Clipboard_Click" Content="▣   Presse-papiers"/>
                     <Button Style="{StaticResource NavButton}" Click="Webcam_Click" Content="◉   Webcam"/>
                     <Button Style="{StaticResource NavButton}" Click="Settings_Click" Content="⚙   Paramètres"/>
@@ -624,6 +625,87 @@
                             </StackPanel>
                         </Border>
                     </Grid>
+                </Grid>
+                <Grid x:Name="WhiteboardView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="0" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Tableau blanc" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock Text="Dessin natif Windows • synchronisation avec les clients RemoteFlow compatibles"
+                                           Foreground="#94A3B8"
+                                           FontSize="11"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                                <Button Tag="#2563EB" Content="●" Foreground="#2563EB" Background="Transparent"
+                                        BorderThickness="0" FontSize="20" Padding="5,0" Click="WhiteboardColor_Click"
+                                        ToolTip="Bleu"/>
+                                <Button Tag="#DC2626" Content="●" Foreground="#DC2626" Background="Transparent"
+                                        BorderThickness="0" FontSize="20" Padding="5,0" Click="WhiteboardColor_Click"
+                                        ToolTip="Rouge"/>
+                                <Button Tag="#16A34A" Content="●" Foreground="#16A34A" Background="Transparent"
+                                        BorderThickness="0" FontSize="20" Padding="5,0" Click="WhiteboardColor_Click"
+                                        ToolTip="Vert"/>
+                                <Button Tag="#F59E0B" Content="●" Foreground="#F59E0B" Background="Transparent"
+                                        BorderThickness="0" FontSize="20" Padding="5,0" Click="WhiteboardColor_Click"
+                                        ToolTip="Orange"/>
+                                <Button Tag="#111827" Content="●" Foreground="#111827" Background="Transparent"
+                                        BorderThickness="0" FontSize="20" Padding="5,0" Click="WhiteboardColor_Click"
+                                        ToolTip="Noir"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Margin="12,0,0,0">
+                                <TextBlock Text="Épaisseur" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="WhiteboardThicknessCombo" Width="80" SelectedIndex="2" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="2"/>
+                                    <ComboBoxItem Content="4"/>
+                                    <ComboBoxItem Content="6"/>
+                                    <ComboBoxItem Content="10"/>
+                                    <ComboBoxItem Content="14"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <Button Grid.Column="3" Content="Annuler" Click="WhiteboardUndo_Click"
+                                    Padding="12,8" Margin="10,20,0,0"/>
+                            <Button Grid.Column="4" Content="Effacer" Click="WhiteboardClear_Click"
+                                    Padding="12,8" Margin="8,20,0,0"/>
+                            <Button Grid.Column="5" Content="Exporter PNG" Click="WhiteboardExport_Click"
+                                    Padding="12,8" Margin="8,20,0,0"/>
+                            <Button Grid.Column="6" Content="Envoyer" Click="WhiteboardSendAll_Click"
+                                    Padding="12,8" Margin="8,20,0,0"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="1" Padding="8">
+                        <InkCanvas x:Name="WhiteboardCanvas"
+                                   Background="White"
+                                   EditingMode="Ink"
+                                   UseLayoutRounding="True"/>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="2" Margin="0,14,0,0" Padding="12">
+                        <TextBlock x:Name="WhiteboardStatusText"
+                                   Text="Tableau blanc prêt. Dessinez avec la souris ou un stylet."
+                                   Foreground="#22D3EE"
+                                   TextWrapping="Wrap"/>
+                    </Border>
                 </Grid>
                 <StackPanel x:Name="PlaceholderView" Visibility="Collapsed">
                     <Border Style="{StaticResource Card}">

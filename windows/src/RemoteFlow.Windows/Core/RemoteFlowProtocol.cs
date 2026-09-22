@@ -53,6 +53,7 @@ public sealed record RemoteFlowMessage
     public string? Color { get; init; }
     public float? Width { get; init; }
     public int? PointsCount { get; init; }
+    public IReadOnlyList<RemoteFlowWhiteboardPoint>? Points { get; init; }
     public string? Text { get; init; }
     public long? Timestamp { get; init; }
     public int? Version { get; init; }
@@ -151,3 +152,14 @@ public sealed record RemoteFlowMacroInfo(
 public sealed record RemoteFlowMacroList(
     string Event,
     IReadOnlyList<RemoteFlowMacroInfo> Macros);
+
+
+public sealed record RemoteFlowWhiteboardPoint(float X, float Y);
+
+public sealed record RemoteFlowWhiteboardStroke(
+    string Event,
+    IReadOnlyList<RemoteFlowWhiteboardPoint> Points,
+    string Color,
+    float Width,
+    string Source,
+    long Timestamp);

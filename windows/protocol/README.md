@@ -120,3 +120,29 @@ La diffusion est restreinte aux sessions autorisées lorsque le verrouillage par
 La synchronisation reste locale au socket TCP RemoteFlow sur le réseau local. Aucun serveur distant n'est requis et aucune donnée de presse-papiers n'est envoyée à Internet par cette fonctionnalité.
 
 Le client Android actuel sait déjà envoyer \`action=clipboard\`; l'application Android v1 ne consomme toutefois pas encore l'événement entrant \`event=clipboard\`. Aucun fichier Android n'est modifié dans cette phase.
+
+
+## Phase 13 — Tableau blanc Windows natif
+
+Windows propose désormais un tableau blanc WPF natif basé sur `InkCanvas`.
+
+Fonctions locales :
+- dessin à la souris ou au stylet ;
+- palette de couleurs ;
+- épaisseur configurable ;
+- annulation du dernier tracé ;
+- effacement du tableau ;
+- export du tableau en PNG ;
+- envoi manuel de tous les tracés vers les clients RemoteFlow autorisés.
+
+Le protocole accepte maintenant les tracés complets avec `points`, chaque point étant normalisé de 0 à 1, ainsi que `color`, `width`, `source` et `timestamp`.
+
+Exemple :
+
+```json
+{"event":"whiteboard_stroke","points":[{"x":0.1,"y":0.2},{"x":0.2,"y":0.25}],"color":"#2563EB","width":6,"source":"windows","timestamp":0}
+```
+
+Windows conserve la compatibilité avec le format Android v1 actuel qui ne fournit que `pointsCount` : le tracé est accusé réception et journalisé, mais ne peut pas être redessiné sans coordonnées.
+
+Les tracés complets provenant d'un client compatible sont affichés immédiatement dans le tableau blanc Windows puis relayés aux autres clients autorisés.

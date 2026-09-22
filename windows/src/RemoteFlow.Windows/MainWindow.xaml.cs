@@ -4,6 +4,10 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Controls;
+using System.Windows.Ink;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Screen;
@@ -21,6 +25,7 @@ public partial class MainWindow : Window
     private string? _activeFileTransferId;
     private string? _editingMacroId;
     private CancellationTokenSource? _macroCts;
+    private bool _applyingRemoteWhiteboardStroke;
 
     public MainWindow()
     {
@@ -29,10 +34,13 @@ public partial class MainWindow : Window
         _core.Server.StatusChanged += Server_StatusChanged;
         _core.Server.ClipboardStatusChanged += Server_ClipboardStatusChanged;
         _core.Server.FileTransferStatusChanged += Server_FileTransferStatusChanged;
+        _core.Server.WhiteboardStrokeReceived += Server_WhiteboardStrokeReceived;
         FilesList.ItemsSource = _fileItems;
         ScreensList.ItemsSource = _screenItems;
         MacrosList.ItemsSource = _macroItems;
         MacroStepsList.ItemsSource = _macroSteps;
+        WhiteboardCanvas.DefaultDrawingAttributes = CreateWhiteboardDrawingAttributes("#2563EB", 6);
+        WhiteboardCanvas.StrokeCollected += WhiteboardCanvas_StrokeCollected;
         Closed += MainWindow_Closed;
 
         RefreshPairingUi();
@@ -101,6 +109,7 @@ public partial class MainWindow : Window
         FilesView.Visibility = Visibility.Collapsed;
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Visible;
         PageTitle.Text = title;
         PageSubtitle.Text = "RemoteFlow Windows natif";
@@ -115,6 +124,7 @@ public partial class MainWindow : Window
         FilesView.Visibility = Visibility.Collapsed;
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau de bord";
         PageSubtitle.Text = "Centre de contrôle RemoteFlow Windows.";
@@ -128,6 +138,7 @@ public partial class MainWindow : Window
         FilesView.Visibility = Visibility.Collapsed;
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Connexion & appairage";
         PageSubtitle.Text = "QR, PIN et identité de sécurité RemoteFlow.";
@@ -141,6 +152,7 @@ public partial class MainWindow : Window
         FilesView.Visibility = Visibility.Visible;
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Fichiers";
         PageSubtitle.Text = "Gestion native du dossier RemoteFlow et transferts avec le client connecté.";
@@ -155,6 +167,7 @@ public partial class MainWindow : Window
         FilesView.Visibility = Visibility.Collapsed;
         ScreensView.Visibility = Visibility.Visible;
         MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Multi-écrans";
         PageSubtitle.Text = "Moniteurs Windows, sélection d’écran et streaming distant natif.";
@@ -267,10 +280,276 @@ public partial class MainWindow : Window
         FilesView.Visibility = Visibility.Collapsed;
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Visible;
+        WhiteboardView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Macros";
         PageSubtitle.Text = "Séquences d’actions natives enregistrées localement et exécutables sur Windows.";
         RefreshMacros();
+    }
+
+
+    private void Whiteboard_Click(object sender, RoutedEventArgs e)
+    {
+        DashboardView.Visibility = Visibility.Collapsed;
+        ConnectionView.Visibility = Visibility.Collapsed;
+        FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Collapsed;
+        MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Visible;
+        PlaceholderView.Visibility = Visibility.Collapsed;
+        PageTitle.Text = "Tableau blanc";
+        PageSubtitle.Text = "Dessin natif Windows et partage de tracés avec les clients RemoteFlow compatibles.";
+        WhiteboardStatusText.Text = "Tableau blanc prêt. Dessinez avec la souris ou un stylet.";
+    }
+
+    private void WhiteboardColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string colorText)
+            return;
+
+        var thickness = GetWhiteboardThickness();
+        WhiteboardCanvas.DefaultDrawingAttributes = CreateWhiteboardDrawingAttributes(colorText, thickness);
+        WhiteboardStatusText.Text = $"Couleur sélectionnée : {colorText}.";
+    }
+
+    private void WhiteboardCanvas_StrokeCollected(object? sender, InkCanvasStrokeCollectedEventArgs e)
+    {
+        if (_applyingRemoteWhiteboardStroke)
+            return;
+
+        var color = WhiteboardCanvas.DefaultDrawingAttributes.Color;
+        var width = GetWhiteboardThickness();
+        e.Stroke.DrawingAttributes = CreateWhiteboardDrawingAttributes(color, width);
+
+        var stroke = ToRemoteWhiteboardStroke(e.Stroke, "windows");
+        if (stroke is null)
+        {
+            WhiteboardStatusText.Text = "Tracé ignoré : coordonnées invalides.";
+            return;
+        }
+
+        WhiteboardStatusText.Text = $"Tracé local ajouté • {stroke.Points.Count:N0} points • envoi aux clients autorisés…";
+        _ = SendWhiteboardStrokeAsync(stroke);
+    }
+
+    private async Task SendWhiteboardStrokeAsync(RemoteFlowWhiteboardStroke stroke)
+    {
+        try
+        {
+            var result = await _core.Server.BroadcastWhiteboardStrokeAsync(stroke);
+            WhiteboardStatusText.Text = result.SentCount > 0
+                ? $"Tracé synchronisé • {stroke.Points.Count:N0} points • {result.SentCount} client(s)."
+                : $"Tracé local enregistré • {stroke.Points.Count:N0} points • aucun client compatible connecté.";
+        }
+        catch (Exception ex)
+        {
+            WhiteboardStatusText.Text = $"Synchronisation du tracé impossible : {ex.Message}";
+        }
+    }
+
+    private void WhiteboardUndo_Click(object sender, RoutedEventArgs e)
+    {
+        if (WhiteboardCanvas.Strokes.Count == 0)
+        {
+            WhiteboardStatusText.Text = "Aucun tracé à annuler.";
+            return;
+        }
+
+        WhiteboardCanvas.Strokes.RemoveAt(WhiteboardCanvas.Strokes.Count - 1);
+        WhiteboardStatusText.Text = "Dernier tracé supprimé localement.";
+    }
+
+    private void WhiteboardClear_Click(object sender, RoutedEventArgs e)
+    {
+        if (WhiteboardCanvas.Strokes.Count == 0)
+        {
+            WhiteboardStatusText.Text = "Le tableau blanc est déjà vide.";
+            return;
+        }
+
+        WhiteboardCanvas.Strokes.Clear();
+        WhiteboardStatusText.Text = "Tableau blanc effacé localement.";
+    }
+
+    private void WhiteboardExport_Click(object sender, RoutedEventArgs e)
+    {
+        if (WhiteboardCanvas.ActualWidth < 1 || WhiteboardCanvas.ActualHeight < 1)
+        {
+            WhiteboardStatusText.Text = "Impossible d'exporter : le tableau blanc n'est pas encore affiché.";
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Image PNG (*.png)|*.png",
+            DefaultExt = ".png",
+            AddExtension = true,
+            FileName = $"RemoteFlow-Whiteboard-{DateTime.Now:yyyyMMdd-HHmmss}.png"
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            var width = Math.Max(1, (int)Math.Ceiling(WhiteboardCanvas.ActualWidth));
+            var height = Math.Max(1, (int)Math.Ceiling(WhiteboardCanvas.ActualHeight));
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(WhiteboardCanvas);
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using var stream = File.Create(dialog.FileName);
+            encoder.Save(stream);
+
+            WhiteboardStatusText.Text = $"Export PNG terminé : {Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception ex)
+        {
+            WhiteboardStatusText.Text = $"Export PNG impossible : {ex.Message}";
+        }
+    }
+
+    private async void WhiteboardSendAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (WhiteboardCanvas.Strokes.Count == 0)
+        {
+            WhiteboardStatusText.Text = "Dessinez d'abord avant d'envoyer.";
+            return;
+        }
+
+        var strokes = WhiteboardCanvas.Strokes
+            .Select(stroke => ToRemoteWhiteboardStroke(stroke, "windows"))
+            .Where(stroke => stroke is not null)
+            .Cast<RemoteFlowWhiteboardStroke>()
+            .ToArray();
+
+        if (strokes.Length == 0)
+        {
+            WhiteboardStatusText.Text = "Aucun tracé exportable.";
+            return;
+        }
+
+        var sent = 0;
+        foreach (var stroke in strokes)
+        {
+            var result = await _core.Server.BroadcastWhiteboardStrokeAsync(stroke);
+            sent += result.SentCount;
+        }
+
+        WhiteboardStatusText.Text = $"Tableau blanc envoyé • {strokes.Length:N0} tracé(s) • {sent:N0} livraison(s).";
+    }
+
+    private void Server_WhiteboardStrokeReceived(object? sender, RemoteFlowWhiteboardStroke stroke)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (WhiteboardCanvas.ActualWidth < 1 || WhiteboardCanvas.ActualHeight < 1)
+            {
+                WhiteboardStatusText.Text = "Tracé distant reçu avant l'initialisation du tableau blanc.";
+                return;
+            }
+
+            try
+            {
+                var points = new StylusPointCollection();
+                foreach (var point in stroke.Points)
+                {
+                    points.Add(new StylusPoint(
+                        Math.Clamp(point.X, 0f, 1f) * WhiteboardCanvas.ActualWidth,
+                        Math.Clamp(point.Y, 0f, 1f) * WhiteboardCanvas.ActualHeight));
+                }
+
+                if (points.Count == 0)
+                    return;
+
+                if (points.Count == 1)
+                    points.Add(new StylusPoint(points[0].X + 0.01, points[0].Y));
+
+                var localStroke = new Stroke(points)
+                {
+                    DrawingAttributes = CreateWhiteboardDrawingAttributes(
+                        stroke.Color,
+                        Math.Clamp(stroke.Width, 1f, 100f))
+                };
+
+                _applyingRemoteWhiteboardStroke = true;
+                try
+                {
+                    WhiteboardCanvas.Strokes.Add(localStroke);
+                }
+                finally
+                {
+                    _applyingRemoteWhiteboardStroke = false;
+                }
+
+                WhiteboardStatusText.Text = $"Tracé reçu de {stroke.Source} • {stroke.Points.Count:N0} points.";
+            }
+            catch (Exception ex)
+            {
+                WhiteboardStatusText.Text = $"Tracé distant ignoré : {ex.Message}";
+            }
+        });
+    }
+
+    private float GetWhiteboardThickness()
+    {
+        if (WhiteboardThicknessCombo.SelectedItem is ComboBoxItem item &&
+            float.TryParse(item.Content?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value))
+            return Math.Clamp(value, 1f, 100f);
+
+        return 6f;
+    }
+
+    private static DrawingAttributes CreateWhiteboardDrawingAttributes(string colorText, float width)
+    {
+        if (string.IsNullOrWhiteSpace(colorText))
+            throw new InvalidOperationException("Couleur de tracé absente.");
+
+        return CreateWhiteboardDrawingAttributes(
+            (Color)ColorConverter.ConvertFromString(colorText),
+            width);
+    }
+
+    private static DrawingAttributes CreateWhiteboardDrawingAttributes(Color color, float width) =>
+        new()
+        {
+            Color = color,
+            Width = Math.Clamp(width, 1f, 100f),
+            Height = Math.Clamp(width, 1f, 100f),
+            FitToCurve = true,
+            IgnorePressure = true
+        };
+
+    private RemoteFlowWhiteboardStroke? ToRemoteWhiteboardStroke(Stroke stroke, string source)
+    {
+        var width = Math.Clamp((float)stroke.DrawingAttributes.Width, 1f, 100f);
+        var canvasWidth = WhiteboardCanvas.ActualWidth;
+        var canvasHeight = WhiteboardCanvas.ActualHeight;
+
+        if (canvasWidth < 1 || canvasHeight < 1)
+            return null;
+
+        var points = stroke.StylusPoints
+            .Select(point => new RemoteFlowWhiteboardPoint(
+                Math.Clamp((float)(point.X / canvasWidth), 0f, 1f),
+                Math.Clamp((float)(point.Y / canvasHeight), 0f, 1f)))
+            .Take(5000)
+            .ToArray();
+
+        if (points.Length == 0)
+            return null;
+
+        var color = stroke.DrawingAttributes.Color;
+        var colorHex = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+        return new RemoteFlowWhiteboardStroke(
+            Event: "whiteboard_stroke",
+            Points: points,
+            Color: colorHex,
+            Width: width,
+            Source: source,
+            Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
     }
 
     private void RefreshMacros_Click(object sender, RoutedEventArgs e) => RefreshMacros();

@@ -33,6 +33,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<string>? ClipboardStatusChanged;
     public event EventHandler<RemoteFlowFileTransferState>? FileTransferStatusChanged;
+    public event EventHandler<RemoteFlowWhiteboardStroke>? WhiteboardStrokeReceived;
     public event EventHandler<RemoteFlowServerEvent>? MessageReceived;
 
     public RemoteFlowServer(PairingManager pairing)
@@ -152,6 +153,33 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         {
             return (false, ex.Message, null);
         }
+    }
+
+    public async Task<(bool Ok, string? Error, int SentCount)> BroadcastWhiteboardStrokeAsync(
+        RemoteFlowWhiteboardStroke stroke,
+        CancellationToken cancellationToken = default)
+    {
+        if (stroke.Points.Count is < 1 or > 5000)
+            return (false, "Un nombre de points invalide.", 0);
+
+        ConnectedClient[] clients;
+        lock (_clientsGate)
+            clients = _connectedClients.Where(x => x.IsAuthorized()).ToArray();
+
+        var sentCount = 0;
+        foreach (var client in clients)
+        {
+            try
+            {
+                await client.Session.SendAsync(stroke, cancellationToken);
+                sentCount++;
+            }
+            catch
+            {
+            }
+        }
+
+        return (true, null, sentCount);
     }
 
     public async Task<(bool Ok, string? Error, string? TransferId)> SendFileToConnectedClientAsync(
@@ -501,6 +529,114 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                             Ok: false,
                             Action: "macro",
                             Error: $"Commande macro non prise en charge : {macroType ?? "(vide)"}",
+                            Paired: sessionPaired),
+                        cancellationToken);
+                    return;
+                }
+
+                if (string.Equals(message.Action, "whiteboard", StringComparison.OrdinalIgnoreCase))
+                {
+                    var points = message.Points;
+                    if (points is null || points.Count == 0)
+                    {
+                        var legacyCount = Math.Clamp(message.PointsCount ?? 0, 0, 5000);
+                        if (legacyCount == 0)
+                        {
+                            await session.SendAsync(
+                                new RemoteFlowAck(
+                                    Event: "ack",
+                                    Ok: false,
+                                    Action: "whiteboard",
+                                    Error: "Tracé sans points.",
+                                    Paired: sessionPaired),
+                                cancellationToken);
+                            return;
+                        }
+
+                        var legacySummary = $"Tableau blanc reçu : {legacyCount:N0} points (coordonnées non fournies par ce client).";
+                        MessageReceived?.Invoke(
+                            this,
+                            new RemoteFlowServerEvent(
+                                "whiteboard",
+                                "STROKE",
+                                legacySummary,
+                                DateTimeOffset.UtcNow));
+
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: true,
+                                Action: "whiteboard",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    if (points.Count > 5000)
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "whiteboard",
+                                Error: "Tracé trop volumineux (maximum 5000 points).",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    if (points.Any(point => point.X is < 0f or > 1f || point.Y is < 0f or > 1f))
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "whiteboard",
+                                Error: "Les coordonnées du tracé doivent être normalisées entre 0 et 1.",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    var color = message.Color?.Trim() ?? "#2563EB";
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(color, "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"))
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "whiteboard",
+                                Error: "Couleur de tracé invalide.",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    var width = Math.Clamp(message.Width ?? 6f, 1f, 100f);
+                    var remoteStroke = new RemoteFlowWhiteboardStroke(
+                        Event: "whiteboard_stroke",
+                        Points: points.Take(5000).ToArray(),
+                        Color: color,
+                        Width: width,
+                        Source: message.ClientName ?? "RemoteFlow",
+                        Timestamp: message.Timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+                    WhiteboardStrokeReceived?.Invoke(this, remoteStroke);
+                    MessageReceived?.Invoke(
+                        this,
+                        new RemoteFlowServerEvent(
+                            "whiteboard",
+                            "STROKE",
+                            $"Tableau blanc : {remoteStroke.Points.Count:N0} points reçus",
+                            DateTimeOffset.UtcNow));
+
+                    await BroadcastWhiteboardStrokeAsync(remoteStroke, cancellationToken);
+
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: true,
+                            Action: "whiteboard",
                             Paired: sessionPaired),
                         cancellationToken);
                     return;
