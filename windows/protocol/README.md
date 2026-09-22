@@ -195,3 +195,18 @@ Réglages :
 Le port est appliqué en redémarrant proprement le serveur TCP. Le démarrage automatique utilise la clé utilisateur Windows `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` et lance RemoteFlow avec l'option `--minimized`.
 
 La réinitialisation remet les réglages applicatifs aux valeurs par défaut, désactive le démarrage automatique, désactive le verrouillage par appairage et réactive le presse-papiers.
+
+## Phase 16 — Tableau de bord système réel
+
+Le tableau de bord Windows n'utilise plus de valeurs CPU, RAM ou réseau fictives.
+
+Les métriques affichées sont actualisées automatiquement chaque seconde :
+- CPU système via GetSystemTimes ;
+- mémoire physique totale, utilisée et disponible via GlobalMemoryStatusEx ;
+- nombre réel de connexions TCP actives du serveur RemoteFlow ;
+- état réel de la synchronisation du presse-papiers ;
+- état du serveur TCP, port d'écoute et durée depuis le démarrage de Windows via GetTickCount64.
+
+La carte auparavant dédiée à une latence fixe de démonstration affiche désormais le nombre réel de clients connectés. La latence réseau distante n'est pas inventée : le protocole actuel ne définit pas encore de mesure RTT client/serveur exploitable par le tableau de bord.
+
+Aucune modification Android n'est requise pour cette phase.

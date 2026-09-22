@@ -110,29 +110,29 @@
                         <Border Style="{StaticResource Card}" Grid.Column="0" Margin="0,0,10,0">
                             <StackPanel>
                                 <TextBlock Text="CPU" Foreground="#94A3B8" FontSize="11"/>
-                                <TextBlock Text="18 %" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
-                                <TextBlock Text="Utilisation système" Foreground="#64748B" FontSize="11"/>
+                                <TextBlock x:Name="DashboardCpuValue" Text="—" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
+                                <TextBlock x:Name="DashboardCpuDetail" Text="Utilisation système" Foreground="#64748B" FontSize="11"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}" Grid.Column="1" Margin="5,0,5,0">
                             <StackPanel>
                                 <TextBlock Text="RAM" Foreground="#94A3B8" FontSize="11"/>
-                                <TextBlock Text="6.4 GB" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
-                                <TextBlock Text="sur 16 GB" Foreground="#64748B" FontSize="11"/>
+                                <TextBlock x:Name="DashboardRamValue" Text="—" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
+                                <TextBlock x:Name="DashboardRamDetail" Text="Mémoire système" Foreground="#64748B" FontSize="11"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}" Grid.Column="2" Margin="5,0,5,0">
                             <StackPanel>
-                                <TextBlock Text="Latence" Foreground="#94A3B8" FontSize="11"/>
-                                <TextBlock Text="8 ms" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
-                                <TextBlock Text="Réseau local" Foreground="#64748B" FontSize="11"/>
+                                <TextBlock Text="Clients" Foreground="#94A3B8" FontSize="11"/>
+                                <TextBlock x:Name="DashboardClientsValue" Text="0" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
+                                <TextBlock x:Name="DashboardClientsDetail" Text="Connexions TCP actives" Foreground="#64748B" FontSize="11"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}" Grid.Column="3" Margin="10,0,0,0">
                             <StackPanel>
                                 <TextBlock Text="Presse-papiers" Foreground="#94A3B8" FontSize="11"/>
-                                <TextBlock Text="ACTIF" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
-                                <TextBlock Text="Synchronisation locale" Foreground="#34D399" FontSize="11"/>
+                                <TextBlock x:Name="DashboardClipboardValue" Text="ACTIF" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
+                                <TextBlock x:Name="DashboardClipboardStatus" Text="Synchronisation locale" Foreground="#34D399" FontSize="11"/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -145,13 +145,17 @@
 
                         <Border Style="{StaticResource Card}" Grid.Column="0" Margin="0,0,10,0">
                             <StackPanel>
-                                <TextBlock Text="Bureau distant" FontSize="16" FontWeight="SemiBold"/>
-                                <TextBlock Text="Prévisualisation de la session Windows" FontSize="12" Foreground="#94A3B8" Margin="0,5,0,16"/>
+                                <TextBlock Text="État du bureau distant" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="État réel du serveur Windows et des connexions actives" FontSize="12" Foreground="#94A3B8" Margin="0,5,0,16"/>
                                 <Border Height="300" Background="#020617" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10">
                                     <Grid>
-                                        <TextBlock Text="Session distante prête" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#64748B"/>
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock x:Name="DashboardServerState" Text="Serveur en préparation…" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="DashboardServerInfo" Text="—" Foreground="#94A3B8" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="DashboardDesktopInfo" Text="Aucun client distant connecté." Foreground="#64748B" Margin="0,18,0,0" HorizontalAlignment="Center"/>
+                                        </StackPanel>
                                         <Border HorizontalAlignment="Left" VerticalAlignment="Top" Background="#111827" Padding="8,5" Margin="12">
-                                            <TextBlock Text="RemoteFlow • sécurisé prêt" FontSize="11" Foreground="#CBD5E1"/>
+                                            <TextBlock x:Name="DashboardServerBadge" Text="RemoteFlow • serveur" FontSize="11" Foreground="#CBD5E1"/>
                                         </Border>
                                     </Grid>
                                 </Border>
@@ -170,7 +174,7 @@
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
                                     <TextBlock Text="Presse-papiers universel" FontSize="15" FontWeight="SemiBold"/>
-                                    <TextBlock x:Name="DashboardClipboardStatus" Text="Surveillance active • texte uniquement" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,7,0,12"/>
+                                    <TextBlock x:Name="DashboardClipboardSecondaryStatus" Text="Surveillance active • texte uniquement" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,7,0,12"/>
                                     <Button Content="Ouvrir le presse-papiers" Click="Clipboard_Click"/>
                                 </StackPanel>
                             </Border>

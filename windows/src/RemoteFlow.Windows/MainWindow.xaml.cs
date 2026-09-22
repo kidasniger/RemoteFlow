@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Screen;
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _macroCts;
     private bool _applyingRemoteWhiteboardStroke;
     private bool _webcamStopping;
+    private readonly DispatcherTimer _dashboardMetricsTimer;
 
     public MainWindow()
     {
@@ -48,6 +50,14 @@ public partial class MainWindow : Window
         WebcamPreviewImage.Visibility = Visibility.Collapsed;
         WebcamPreviewPlaceholder.Visibility = Visibility.Visible;
         _ = RefreshWebcamsAsync();
+
+        _dashboardMetricsTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _dashboardMetricsTimer.Tick += DashboardMetricsTimer_Tick;
+        RefreshDashboardMetrics();
+        _dashboardMetricsTimer.Start();
         if (_core.Settings.Settings.LaunchMinimized ||
             Environment.GetCommandLineArgs().Any(x => string.Equals(x, "--minimized", StringComparison.OrdinalIgnoreCase)))
         {
@@ -99,9 +109,90 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            DashboardClipboardStatus.Text = status;
+            DashboardClipboardSecondaryStatus.Text = status;
             PairingClipboardStatus.Text = status;
+            DashboardClipboardValue.Text = _core.Server.ClipboardSyncEnabled ? "ACTIF" : "ARRÊTÉ";
         });
+    }
+
+    private void DashboardMetricsTimer_Tick(object? sender, EventArgs e) => RefreshDashboardMetrics();
+
+    private void RefreshDashboardMetrics()
+    {
+        try
+        {
+            var metrics = WindowsSystemMetricsReader.Sample();
+
+            DashboardCpuValue.Text = metrics.CpuUsagePercent.HasValue
+                ? $"{metrics.CpuUsagePercent.Value:0.0} %"
+                : "—";
+            DashboardCpuDetail.Text = metrics.CpuUsagePercent.HasValue
+                ? "Utilisation système"
+                : "Mesure CPU en cours…";
+
+            DashboardRamValue.Text = FormatDashboardMemory(metrics.UsedMemoryBytes);
+            DashboardRamDetail.Text =
+                $"{FormatDashboardMemory(metrics.TotalMemoryBytes)} au total • {metrics.MemoryUsagePercent:0.0} % utilisés";
+
+            var activeConnections = Math.Max(0, _core.Server.ActiveConnections);
+            DashboardClientsValue.Text = activeConnections.ToString("N0");
+            DashboardClientsDetail.Text = activeConnections switch
+            {
+                0 => "Aucune connexion TCP active",
+                1 => "1 connexion TCP active",
+                _ => $"{activeConnections:N0} connexions TCP actives"
+            };
+
+            var clipboardEnabled = _core.Server.ClipboardSyncEnabled;
+            DashboardClipboardValue.Text = clipboardEnabled ? "ACTIF" : "ARRÊTÉ";
+            DashboardClipboardValue.Foreground = clipboardEnabled
+                ? new SolidColorBrush(Color.FromRgb(248, 250, 252))
+                : new SolidColorBrush(Color.FromRgb(251, 191, 36));
+            DashboardClipboardStatus.Foreground = clipboardEnabled
+                ? new SolidColorBrush(Color.FromRgb(52, 211, 153))
+                : new SolidColorBrush(Color.FromRgb(251, 191, 36));
+
+            DashboardServerState.Text = _core.Server.IsRunning
+                ? "Serveur RemoteFlow actif"
+                : "Serveur RemoteFlow arrêté";
+            DashboardServerInfo.Text = _core.Server.IsRunning
+                ? $"TCP 0.0.0.0:{_core.PairingPort} • depuis {FormatUptime(metrics.Uptime)}"
+                : "Aucune écoute TCP en cours";
+            DashboardDesktopInfo.Text = activeConnections switch
+            {
+                0 => "Aucun client distant connecté.",
+                1 => "1 client distant connecté.",
+                _ => $"{activeConnections:N0} clients distants connectés."
+            };
+            DashboardServerBadge.Text = _core.Server.IsRunning
+                ? "RemoteFlow • serveur actif"
+                : "RemoteFlow • serveur arrêté";
+        }
+        catch (Exception ex)
+        {
+            DashboardCpuValue.Text = "—";
+            DashboardCpuDetail.Text = $"Mesure indisponible : {ex.Message}";
+            DashboardServerState.Text = "État système indisponible";
+            DashboardServerInfo.Text = "Impossible de mettre à jour les métriques.";
+        }
+    }
+
+    private static string FormatDashboardMemory(ulong bytes)
+    {
+        const double GiB = 1024d * 1024d * 1024d;
+        const double MiB = 1024d * 1024d;
+        return bytes >= 1024UL * 1024UL * 1024UL
+            ? $"{bytes / GiB:0.0} Go"
+            : $"{bytes / MiB:0} Mo";
+    }
+
+    private static string FormatUptime(TimeSpan uptime)
+    {
+        if (uptime.TotalDays >= 1)
+            return $"{(int)uptime.TotalDays} j {uptime.Hours:00} h {uptime.Minutes:00}";
+        if (uptime.TotalHours >= 1)
+            return $"{(int)uptime.TotalHours} h {uptime.Minutes:00} min";
+        return $"{uptime.Minutes} min {uptime.Seconds:00} s";
     }
 
     private void Core_StateChanged(object? sender, ConnectionState state)
@@ -146,6 +237,7 @@ public partial class MainWindow : Window
         PageTitle.Text = "Tableau de bord";
         PageSubtitle.Text = "Centre de contrôle RemoteFlow Windows.";
         RefreshPairingUi();
+        RefreshDashboardMetrics();
     }
 
     private void Connection_Click(object sender, RoutedEventArgs e)
@@ -1360,6 +1452,7 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
+        _dashboardMetricsTimer.Stop();
         try { await _core.Server.StopWebcamAsync(); } catch { }
         try { await _core.DisposeAsync(); } catch { }
     }
