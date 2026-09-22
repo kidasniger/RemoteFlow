@@ -1181,7 +1181,8 @@ public partial class MainWindow : Window
             try
             {
                 var bitmap = new BitmapImage();
-                using var stream = new MemoryStream(frame.JpegBytes);
+                var jpegBytes = Convert.FromBase64String(frame.Data);
+                using var stream = new MemoryStream(jpegBytes);
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
                 bitmap.StreamSource = stream;
