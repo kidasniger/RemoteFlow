@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
@@ -17,6 +18,8 @@ import com.example.network.DefaultRemotePcClient
 import com.example.sensors.GyroscopeManager
 import com.example.settings.SettingsManager
 import com.example.ui.theme.RemoteFlowTheme
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -31,12 +34,30 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        settingsManager = SettingsManager(this)
         remoteClient = DefaultRemotePcClient()
         gyroManager = GyroscopeManager(this)
         clipboardManager = ClipboardSyncManager(this)
         fileManager = FileManager(this, remoteClient)
         macroRepository = MacroRepository(remoteClient)
-        settingsManager = SettingsManager(this)
+
+        clipboardManager.setLocalClipboardSender { text ->
+            if (settingsManager.settings.value.universalClipboard) {
+                remoteClient.sendClipboard(text)
+            }
+        }
+
+        remoteClient.setIncomingClipboardReceiver { text ->
+            if (settingsManager.settings.value.universalClipboard) {
+                clipboardManager.copyToLocal(text, fromRemote = true)
+            }
+        }
+
+        lifecycleScope.launch {
+            settingsManager.settings.collectLatest { userSettings ->
+                clipboardManager.setSyncEnabled(userSettings.universalClipboard)
+            }
+        }
 
         setContent {
             val userSettings by settingsManager.settings.collectAsState()

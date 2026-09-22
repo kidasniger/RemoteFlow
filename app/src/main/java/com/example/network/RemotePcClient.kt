@@ -57,6 +57,7 @@ interface RemotePcClient {
     fun sendMacroCommand(macroId: String, command: String)
     fun sendWhiteboardStroke(path: WhiteboardPath)
     fun sendClipboard(text: String)
+    fun setIncomingClipboardReceiver(receiver: (String) -> Unit)
 }
 
 class DefaultRemotePcClient(
@@ -76,9 +77,14 @@ class DefaultRemotePcClient(
     private var writer: BufferedWriter? = null
     private var reader: BufferedReader? = null
     private var readJob: Job? = null
+    private var incomingClipboardReceiver: ((String) -> Unit)? = null
 
     private var lastTargetHost: String = ""
     private var lastTargetPort: Int = 8443
+
+    override fun setIncomingClipboardReceiver(receiver: (String) -> Unit) {
+        incomingClipboardReceiver = receiver
+    }
 
     override fun connectWithQr(code: String) {
         // Parse QR content: either "remoteflow://ip:port" or "ip:port" or "ip"
@@ -144,10 +150,9 @@ class DefaultRemotePcClient(
                     try {
                         var line: String?
                         while (newReader.readLine().also { line = it } != null) {
-                            // Process real network messages from PC daemon
                             line?.let { msg ->
                                 withContext(Dispatchers.Main) {
-                                    _lastActionLog.value = "Reçu PC: $msg"
+                                    handleIncomingMessage(msg)
                                 }
                             }
                         }
@@ -230,11 +235,35 @@ class DefaultRemotePcClient(
     }
 
     override fun sendClipboard(text: String) {
+        if (text.length > 1_000_000) {
+            _lastActionLog.value = "Presse-papiers trop volumineux"
+            return
+        }
+
         val json = JSONObject().apply {
             put("action", "clipboard")
             put("text", text)
         }.toString()
-        sendRawPayload(json, "Presse-papiers envoyé")
+        sendRawPayload(json, "Presse-papiers envoyé au PC")
+    }
+
+    private fun handleIncomingMessage(rawMessage: String) {
+        try {
+            val json = JSONObject(rawMessage)
+            if (json.optString("event") == "clipboard" &&
+                json.optString("source").equals("windows", ignoreCase = true) &&
+                json.has("text") &&
+                !json.isNull("text")
+            ) {
+                incomingClipboardReceiver?.invoke(json.getString("text"))
+                _lastActionLog.value = "Presse-papiers reçu depuis Windows"
+                return
+            }
+        } catch (_: Exception) {
+            // Keep normal logging for malformed or unrelated messages.
+        }
+
+        _lastActionLog.value = "Reçu PC: $rawMessage"
     }
 
     private fun sendRawPayload(payload: String, logLabel: String) {
