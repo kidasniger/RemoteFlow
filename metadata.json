@@ -1,0 +1,7 @@
+{
+  "name": "RemoteFlow",
+  "description": "Contrôle PC à distance : bureau distant, partage de fichiers, tableau blanc, souris gyroscopique, macros et webcam.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

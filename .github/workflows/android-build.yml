@@ -1,0 +1,136 @@
+name: Android Build & Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag de la release (ex: v1.0.1)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build APK, Create Tag & GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build Android APK
+        run: |
+          ./gradlew assembleDebug
+          # Tentative d'assemblage release si les clés sont configurées
+          ./gradlew assembleRelease || echo "Build release spécifique non requis, utilisation de l'APK installable"
+
+      - name: Determine Version & Tag
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v1.0"
+            TAG="${VERSION}.${{ github.run_number }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Tag sélectionné : $TAG"
+
+      - name: Prepare APKs for Release
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          mkdir -p release-apks
+          
+          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            cp app/build/outputs/apk/release/app-release.apk "release-apks/RemoteFlow-${TAG}.apk"
+          fi
+          if [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk "release-apks/RemoteFlow-${TAG}-unsigned.apk"
+          fi
+          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk "release-apks/RemoteFlow-${TAG}-installable.apk"
+          fi
+          
+          echo "Fichiers APK prêts pour la release :"
+          ls -la release-apks/
+
+      - name: Create Git Tag (if not present)
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Création et publication du tag Git $TAG..."
+            git tag -a "$TAG" -m "Release $TAG générée automatiquement par CI/CD"
+            git push origin "$TAG"
+          else
+            echo "Le tag $TAG existe déjà sur le dépôt distant."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: "RemoteFlow ${{ steps.vars.outputs.tag }}"
+          body: |
+            ### 🚀 RemoteFlow Android - Version ${{ steps.vars.outputs.tag }}
+
+            Nouvelle version officielle de l'application Android native **RemoteFlow**.
+
+            #### 📦 Installation directe
+            - Téléchargez le fichier APK `RemoteFlow-${{ steps.vars.outputs.tag }}-installable.apk` attaché ci-dessous.
+            - Ouvrez-le sur votre appareil Android pour installer l'application.
+
+            #### ⚡ Fonctionnalités
+            - Contrôle à distance haute précision (Air Trackpad tactile, clics, défilement)
+            - Clavier virtuel PC complet avec touches spéciales (Ctrl, Alt, Win, Del)
+            - Partage de fichiers rapide bidirectionnel
+            - Tableau blanc interactif avec dessin fluide
+            - Souris gyroscopique (Air Mouse) avec calibration
+            - Déclencheurs de macros Windows
+            - Webcam sans fil 1080p
+            - Synchronisation du presse-papiers
+            - Connexion réseau sécurisée QR Code ou IP directe
+          files: |
+            release-apks/*.apk
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: remoteflow-apks-${{ steps.vars.outputs.tag }}
+          path: release-apks/*.apk
