@@ -62,7 +62,15 @@ public sealed record RemoteFlowMessage
     public int? Quality { get; init; }
     public int? MaxWidth { get; init; }
     public int? Fps { get; init; }
-}
+    public string? TransferId { get; init; }
+    public string? FileName { get; init; }
+    public string? Path { get; init; }
+    public long? Size { get; init; }
+    public long? Offset { get; init; }
+    public long? TotalBytes { get; init; }
+    public int? ChunkSize { get; init; }
+    public string? Data { get; init; }
+  }
 
 public sealed record RemoteFlowServerEvent(
     string Action,
@@ -93,4 +101,36 @@ public sealed record RemoteFlowAck(
     string? Error = null,
     string Protocol = RemoteFlowProtocol.ProtocolName,
     bool? Paired = null,
-    string? DeviceId = null);
+    string? DeviceId = null,
+    string? TransferId = null,
+    long? Offset = null,
+    long? TotalBytes = null);
+
+public sealed record RemoteFlowFileInfo(
+    string Name,
+    string RelativePath,
+    long Size,
+    DateTimeOffset LastModifiedUtc);
+
+public sealed record RemoteFlowFileList(
+    string Event,
+    IReadOnlyList<RemoteFlowFileInfo> Files,
+    string Root,
+    bool Truncated = false);
+
+public sealed record RemoteFlowFileChunk(
+    string Event,
+    string TransferId,
+    long Offset,
+    long TotalBytes,
+    bool Final,
+    string Data);
+
+public sealed record RemoteFlowFileTransferState(
+    string Event,
+    string TransferId,
+    string State,
+    long Offset,
+    long TotalBytes,
+    string? FileName = null,
+    string? Error = null);

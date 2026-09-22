@@ -73,3 +73,17 @@ Arret : `{"action":"screen","type":"STOP"}`.
 Chaque frame est envoyee sous `event=screen_frame` avec `sequence`, `timestamp`, `width`, `height`, `format=jpeg`, `quality` et `data` en Base64. Le flux est limite a 15 FPS maximum pour conserver un serveur Windows stable.
 
 Le client Android v1 actuel ne decode pas encore `screen_frame`; aucun fichier Android n'est donc modifie dans cette phase. Le serveur et le protocole de streaming sont prets pour le branchement de l'affichage distant Android.
+
+## Phase 7 — Transfert de fichiers
+
+Le serveur Windows gere les fichiers distants dans `%USERPROFILE%\\Downloads\\RemoteFlow`.
+
+Commandes JSONL : `LIST`, `UPLOAD_START`, `UPLOAD_CHUNK`, `UPLOAD_END`, `UPLOAD_CANCEL`, `DOWNLOAD_START`, `DOWNLOAD_CANCEL`.
+
+Les uploads utilisent des chunks Base64 de 32 KiB par defaut (128 KiB maximum), verifient strictement l'offset et utilisent un fichier `.rfpart` pour permettre une reprise depuis l'offset existant. Le fichier partiel n'est finalise qu'apres verification exacte de la taille.
+
+Les downloads envoient `file_chunk` avec `transferId`, `offset`, `totalBytes`, `final` et `data`. Ils peuvent etre annules sans fermer la connexion.
+
+Les chemins sont confines au dossier RemoteFlow afin d'empecher la traversee de repertoires, et les fichiers `.rfpart` ne sont pas exposes dans `LIST`.
+
+L'Android v1 actuel n'envoie pas encore ces commandes de transfert ; aucun fichier Android n'est modifie dans cette phase.

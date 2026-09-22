@@ -5,6 +5,7 @@ using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Security;
 using RemoteFlow.Windows.Input;
 using RemoteFlow.Windows.Screen;
+using RemoteFlow.Windows.Files;
 
 namespace RemoteFlow.Windows.Network;
 
@@ -12,6 +13,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly PairingManager _pairing;
+    private readonly FileTransferManager _files;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptTask;
@@ -26,6 +28,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     public RemoteFlowServer(PairingManager pairing)
     {
         _pairing = pairing;
+        _files = new FileTransferManager();
     }
 
     public Task StartAsync(int port = RemoteFlowProtocol.DefaultPort)
@@ -106,6 +109,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         var sessionPaired = !_pairing.PairingEnforced;
         string? clientDeviceId = null;
         await using var screenStreaming = new DesktopStreamController(session, cancellationToken);
+        await using var fileTransfers = _files.CreateSession();
 
         try
         {
@@ -168,6 +172,32 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                             Error: "Appairage requis avant le contrôle distant",
                             Paired: false),
                         cancellationToken);
+                    return;
+                }
+
+                if (string.Equals(message.Action, "files", StringComparison.OrdinalIgnoreCase))
+                {
+                    var fileResult = await HandleFileCommandAsync(
+                        session,
+                        fileTransfers,
+                        message,
+                        cancellationToken);
+
+                    if (!fileResult.ok)
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "files",
+                                Error: fileResult.error,
+                                Paired: sessionPaired,
+                                TransferId: message.TransferId,
+                                Offset: fileResult.offset,
+                                TotalBytes: fileResult.totalBytes),
+                            cancellationToken);
+                    }
+
                     return;
                 }
 
@@ -293,6 +323,119 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                 PinLength: security.PinLength,
                 Security: security.Security),
             cancellationToken);
+    }
+
+    private async Task<(bool ok, string? error, long? offset, long? totalBytes)> HandleFileCommandAsync(
+        JsonLineSession session,
+        FileTransferManager.FileTransferSession transfers,
+        RemoteFlowMessage message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var type = message.Type?.Trim().ToUpperInvariant();
+
+            switch (type)
+            {
+                case "LIST":
+                {
+                    var list = _files.ListFiles();
+                    await session.SendAsync(
+                        new RemoteFlowFileList(
+                            Event: "file_list",
+                            Files: list,
+                            Root: "Downloads/RemoteFlow",
+                            Truncated: list.Count >= FileTransferManager.MaxListedFiles),
+                        cancellationToken);
+                    return (true, null, 0, 0);
+                }
+
+                case "UPLOAD_START":
+                {
+                    var state = await transfers.StartUploadAsync(
+                        message.TransferId ?? string.Empty,
+                        message.FileName ?? message.Path ?? string.Empty,
+                        message.Size ?? -1,
+                        message.Offset ?? 0,
+                        cancellationToken);
+
+                    await session.SendAsync(state, cancellationToken);
+                    return (true, null, state.Offset, state.TotalBytes);
+                }
+
+                case "UPLOAD_CHUNK":
+                {
+                    var state = await transfers.WriteChunkAsync(
+                        message.TransferId ?? string.Empty,
+                        message.Offset ?? -1,
+                        message.Data ?? string.Empty,
+                        cancellationToken);
+
+                    await session.SendAsync(state, cancellationToken);
+                    return (true, null, state.Offset, state.TotalBytes);
+                }
+
+                case "UPLOAD_END":
+                {
+                    var state = await transfers.FinishUploadAsync(
+                        message.TransferId ?? string.Empty,
+                        cancellationToken);
+
+                    await session.SendAsync(state, cancellationToken);
+                    return (true, null, state.Offset, state.TotalBytes);
+                }
+
+                case "UPLOAD_CANCEL":
+                    await transfers.CancelUploadAsync(message.TransferId ?? string.Empty);
+                    await session.SendAsync(
+                        new RemoteFlowFileTransferState(
+                            Event: "file_transfer",
+                            TransferId: message.TransferId ?? string.Empty,
+                            State: "cancelled",
+                            Offset: message.Offset ?? 0,
+                            TotalBytes: message.TotalBytes ?? 0,
+                            FileName: message.FileName),
+                        cancellationToken);
+                    return (true, null, message.Offset ?? 0, message.TotalBytes ?? 0);
+
+                case "DOWNLOAD_START":
+                {
+                    var state = await transfers.StartDownloadAsync(
+                        session,
+                        message.TransferId ?? string.Empty,
+                        message.FileName ?? message.Path ?? string.Empty,
+                        message.Offset ?? 0,
+                        cancellationToken);
+
+                    return (true, null, state.Offset, state.TotalBytes);
+                }
+
+                case "DOWNLOAD_CANCEL":
+                    await transfers.CancelDownloadAsync(message.TransferId ?? string.Empty);
+                    await session.SendAsync(
+                        new RemoteFlowFileTransferState(
+                            Event: "file_transfer",
+                            TransferId: message.TransferId ?? string.Empty,
+                            State: "cancelled",
+                            Offset: message.Offset ?? 0,
+                            TotalBytes: message.TotalBytes ?? 0,
+                            FileName: message.FileName),
+                        cancellationToken);
+                    return (true, null, message.Offset ?? 0, message.TotalBytes ?? 0);
+
+                default:
+                    return (false, $"Commande fichiers non prise en charge : {type ?? "(vide)"}", null, null);
+            }
+        }
+        catch (Exception ex) when (
+            ex is InvalidDataException ||
+            ex is UnauthorizedAccessException ||
+            ex is FileNotFoundException ||
+            ex is IOException ||
+            ex is InvalidOperationException)
+        {
+            return (false, ex.Message, message.Offset, message.TotalBytes);
+        }
     }
 
     private static (bool ok, string? summary, string? error) ExecuteAction(RemoteFlowMessage message)
