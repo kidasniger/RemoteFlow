@@ -7,7 +7,6 @@ using System.Windows.Controls;
 using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Screen;
@@ -1205,9 +1204,6 @@ public partial class MainWindow : Window
         ShowPage(
             "Presse-papiers universel",
             "Synchronisation locale du texte entre Windows et les clients RemoteFlow compatibles. Aucun serveur cloud ni Internet n'est utilisé.");
-
-    private void Webcam_Click(object sender, RoutedEventArgs e) =>
-        ShowPage("Webcam", "Capture caméra réseau du téléphone et intégration webcam Windows.");
 
     private void Settings_Click(object sender, RoutedEventArgs e) =>
         ShowPage("Paramètres & sécurité", "Paramètres système, chiffrement, réseau, UPnP et démarrage.");

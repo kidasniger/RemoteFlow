@@ -1,5 +1,6 @@
 using System.IO;
 using OpenCvSharp;
+using RemoteFlow.Windows.Core;
 
 namespace RemoteFlow.Windows.Webcam;
 
