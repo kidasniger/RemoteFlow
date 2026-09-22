@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using RemoteFlow.Windows.Core;
@@ -20,7 +21,8 @@ public sealed class JsonLineSession : IAsyncDisposable
         _writer = new StreamWriter(stream, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true)
         {
             AutoFlush = true,
-            NewLine = "\n"
+            NewLine = "
+"
         };
     }
 
@@ -30,14 +32,8 @@ public sealed class JsonLineSession : IAsyncDisposable
     {
         var json = RemoteFlowProtocol.Serialize(message);
         await _writeLock.WaitAsync(cancellationToken);
-        try
-        {
-            await _writer.WriteLineAsync(json);
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
+        try { await _writer.WriteLineAsync(json); }
+        finally { _writeLock.Release(); }
     }
 
     public async Task RunAsync(Func<string, Task> onLine, CancellationToken cancellationToken = default)
@@ -45,9 +41,7 @@ public sealed class JsonLineSession : IAsyncDisposable
         while (!cancellationToken.IsCancellationRequested)
         {
             var line = await _reader.ReadLineAsync(cancellationToken);
-            if (line is null)
-                break;
-
+            if (line is null) break;
             await onLine(line);
         }
     }
