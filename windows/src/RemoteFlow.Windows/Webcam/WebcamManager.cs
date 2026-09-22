@@ -149,9 +149,11 @@ public sealed class WebcamManager : IAsyncDisposable
                 if (!capture.Read(frame) || frame.Empty())
                     throw new IOException("La webcam n'a pas fourni d'image.");
 
-                if (!Cv2.ImEncode(".jpg", frame, out var encoded,
-                        new ImageEncodingParam(ImwriteFlags.JpegQuality, quality)))
-                    throw new IOException("Encodage JPEG de la webcam impossible.");
+                Cv2.ImEncode(
+                    ".jpg",
+                    frame,
+                    out var encoded,
+                    new ImageEncodingParam(ImwriteFlags.JpegQuality, quality));
 
                 var current = _currentDevice ?? new WebcamDeviceInfo(0, "Webcam");
                 FrameCaptured?.Invoke(

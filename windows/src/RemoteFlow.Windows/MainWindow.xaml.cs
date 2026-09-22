@@ -11,6 +11,7 @@ using Microsoft.Win32;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Screen;
 using RemoteFlow.Windows.Macros;
+using RemoteFlow.Windows.Webcam;
 
 namespace RemoteFlow.Windows;
 
