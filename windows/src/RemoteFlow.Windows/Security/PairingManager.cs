@@ -94,7 +94,7 @@ public sealed class PairingManager
     public RemoteFlowSecurityHello CreateSignedHello(int port)
     {
         var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
-        var canonical = $"RemoteFlow|{RemoteFlow.Core.RemoteFlowProtocol.CurrentVersion}|{DeviceId}|{port}|{nonce}";
+        var canonical = $"RemoteFlow|{RemoteFlow.Windows.Core.RemoteFlowProtocol.CurrentVersion}|{DeviceId}|{port}|{nonce}";
         var signature = _identityKey.SignData(
             Encoding.UTF8.GetBytes(canonical),
             HashAlgorithmName.SHA256,
