@@ -21,8 +21,7 @@ public sealed class JsonLineSession : IAsyncDisposable
         _writer = new StreamWriter(stream, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true)
         {
             AutoFlush = true,
-            NewLine = "
-"
+            NewLine = "\n"
         };
     }
 
