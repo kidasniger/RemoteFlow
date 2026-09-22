@@ -37,6 +37,6 @@ public static class WindowsStartupManager
         if (string.IsNullOrWhiteSpace(executable))
             throw new InvalidOperationException("Chemin de RemoteFlow introuvable.");
 
-        key.SetValue(ValueName, $""{executable}" --minimized", RegistryValueKind.String);
+        key.SetValue(ValueName, $"\\"{executable}\\" --minimized", RegistryValueKind.String);
     }
 }
