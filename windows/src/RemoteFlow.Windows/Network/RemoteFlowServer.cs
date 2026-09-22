@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Security;
 using RemoteFlow.Windows.Input;
+using RemoteFlow.Windows.Screen;
 
 namespace RemoteFlow.Windows.Network;
 
@@ -104,6 +105,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         await using var session = new JsonLineSession(client);
         var sessionPaired = !_pairing.PairingEnforced;
         string? clientDeviceId = null;
+        await using var screenStreaming = new DesktopStreamController(session, cancellationToken);
 
         try
         {
@@ -169,6 +171,68 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                     return;
                 }
 
+                if (string.Equals(message.Action, "screen", StringComparison.OrdinalIgnoreCase))
+                {
+                    var screenType = message.Type?.Trim().ToUpperInvariant();
+                    if (screenType == "START")
+                    {
+                        var summary = await screenStreaming.StartAsync(
+                            message.Fps ?? 8,
+                            message.MaxWidth ?? 1280,
+                            message.Quality ?? 60,
+                            cancellationToken);
+
+                        MessageReceived?.Invoke(
+                            this,
+                            new RemoteFlowServerEvent(
+                                "screen",
+                                "START",
+                                summary,
+                                DateTimeOffset.UtcNow));
+
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: true,
+                                Action: "screen",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    if (screenType == "STOP")
+                    {
+                        var summary = await screenStreaming.StopAsync();
+
+                        MessageReceived?.Invoke(
+                            this,
+                            new RemoteFlowServerEvent(
+                                "screen",
+                                "STOP",
+                                summary,
+                                DateTimeOffset.UtcNow));
+
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: true,
+                                Action: "screen",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: false,
+                            Action: "screen",
+                            Error: $"Commande écran non prise en charge : {screenType ?? "(vide)"}",
+                            Paired: sessionPaired),
+                        cancellationToken);
+                    return;
+                }
+
                 var execution = ExecuteAction(message);
                 if (!execution.ok)
                 {
@@ -208,6 +272,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         }
         finally
         {
+            try { await screenStreaming.StopAsync(); } catch { }
             ActiveConnections = Math.Max(0, ActiveConnections - 1);
             StatusChanged?.Invoke(this, $"Client déconnecté : {client.Client.RemoteEndPoint}");
         }

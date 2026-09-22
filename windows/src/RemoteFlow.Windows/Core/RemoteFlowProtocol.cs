@@ -59,6 +59,9 @@ public sealed record RemoteFlowMessage
     public string? Pin { get; init; }
     public string? ClientDeviceId { get; init; }
     public string? ClientName { get; init; }
+    public int? Quality { get; init; }
+    public int? MaxWidth { get; init; }
+    public int? Fps { get; init; }
 }
 
 public sealed record RemoteFlowServerEvent(

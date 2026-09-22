@@ -60,3 +60,16 @@ La souris accepte `MOVE`, `MOVE_RELATIVE`, `LEFT_CLICK`, `RIGHT_CLICK`, `DOUBLE_
 Le clavier exécute les caractères simples et les touches système courantes : Ctrl, Alt, Shift, Windows, Entrée, Échap, Tab, Espace, flèches, Home/End, PageUp/PageDown, Insert/Delete, CapsLock et F1–F12.
 
 Les entrées sont injectées avec `SendInput` dans la fenêtre actuellement au premier plan. Les autres actions restent en contrat/ACK et seront implémentées dans leurs phases respectives.
+
+
+## Phase 6 — Streaming du bureau
+
+Windows peut maintenant capturer le bureau virtuel multi-écrans, compresser chaque image en JPEG et l'envoyer au client par JSONL.
+
+Demarrage : `{"action":"screen","type":"START","fps":8,"maxWidth":1280,"quality":60}`.
+
+Arret : `{"action":"screen","type":"STOP"}`.
+
+Chaque frame est envoyee sous `event=screen_frame` avec `sequence`, `timestamp`, `width`, `height`, `format=jpeg`, `quality` et `data` en Base64. Le flux est limite a 15 FPS maximum pour conserver un serveur Windows stable.
+
+Le client Android v1 actuel ne decode pas encore `screen_frame`; aucun fichier Android n'est donc modifie dans cette phase. Le serveur et le protocole de streaming sont prets pour le branchement de l'affichage distant Android.
