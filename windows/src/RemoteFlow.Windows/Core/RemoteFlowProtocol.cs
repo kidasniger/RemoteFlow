@@ -62,6 +62,7 @@ public sealed record RemoteFlowMessage
     public int? Quality { get; init; }
     public int? MaxWidth { get; init; }
     public int? Fps { get; init; }
+    public int? ScreenIndex { get; init; }
     public string? TransferId { get; init; }
     public string? FileName { get; init; }
     public string? Path { get; init; }

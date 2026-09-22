@@ -89,16 +89,26 @@ public static class DesktopCapture
 
     public static CapturedFrame CaptureJpeg(int maxWidth = 1280, int quality = 60)
     {
-        maxWidth = Math.Clamp(maxWidth, 480, 2560);
-        quality = Math.Clamp(quality, 30, 90);
-
         var x = GetSystemMetrics(SM_XVIRTUALSCREEN);
         var y = GetSystemMetrics(SM_YVIRTUALSCREEN);
         var width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         var height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        return CaptureJpeg(x, y, width, height, maxWidth, quality);
+    }
+
+    public static CapturedFrame CaptureJpeg(
+        int x,
+        int y,
+        int width,
+        int height,
+        int maxWidth = 1280,
+        int quality = 60)
+    {
+        maxWidth = Math.Clamp(maxWidth, 480, 2560);
+        quality = Math.Clamp(quality, 30, 90);
 
         if (width <= 0 || height <= 0)
-            throw new InvalidOperationException("Bureau Windows indisponible.");
+            throw new InvalidOperationException("Zone de capture Windows indisponible.");
 
         var screenDc = GetDC(nint.Zero);
         if (screenDc == nint.Zero)
@@ -106,12 +116,16 @@ public static class DesktopCapture
 
         var memDc = CreateCompatibleDC(screenDc);
         var bitmap = CreateCompatibleBitmap(screenDc, width, height);
-        var previous = SelectObject(memDc, bitmap);
+        nint previous = nint.Zero;
 
         try
         {
             if (memDc == nint.Zero || bitmap == nint.Zero)
                 throw new InvalidOperationException("Allocation de capture écran impossible.");
+
+            previous = SelectObject(memDc, bitmap);
+            if (previous == nint.Zero)
+                throw new InvalidOperationException("Préparation du tampon de capture impossible.");
 
             if (!BitBlt(memDc, 0, 0, width, height, screenDc, x, y, SRCCOPY | CAPTUREBLT))
                 throw new InvalidOperationException("La capture écran a échoué.");

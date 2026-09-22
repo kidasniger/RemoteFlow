@@ -3,8 +3,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Windows.Controls;
 using Microsoft.Win32;
 using RemoteFlow.Windows.Core;
+using RemoteFlow.Windows.Screen;
 
 namespace RemoteFlow.Windows;
 
@@ -12,6 +14,7 @@ public partial class MainWindow : Window
 {
     private readonly RemoteFlowCore _core = new();
     private readonly ObservableCollection<RemoteFlowFileInfo> _fileItems = new();
+    private readonly ObservableCollection<WindowsMonitorInfo> _screenItems = new();
     private string? _activeFileTransferId;
 
     public MainWindow()
@@ -22,6 +25,7 @@ public partial class MainWindow : Window
         _core.Server.ClipboardStatusChanged += Server_ClipboardStatusChanged;
         _core.Server.FileTransferStatusChanged += Server_FileTransferStatusChanged;
         FilesList.ItemsSource = _fileItems;
+        ScreensList.ItemsSource = _screenItems;
         Closed += MainWindow_Closed;
 
         RefreshPairingUi();
@@ -88,6 +92,7 @@ public partial class MainWindow : Window
         DashboardView.Visibility = Visibility.Collapsed;
         ConnectionView.Visibility = Visibility.Collapsed;
         FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Visible;
         PageTitle.Text = title;
         PageSubtitle.Text = "RemoteFlow Windows natif";
@@ -100,6 +105,7 @@ public partial class MainWindow : Window
         DashboardView.Visibility = Visibility.Visible;
         ConnectionView.Visibility = Visibility.Collapsed;
         FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau de bord";
         PageSubtitle.Text = "Centre de contrôle RemoteFlow Windows.";
@@ -111,6 +117,7 @@ public partial class MainWindow : Window
         DashboardView.Visibility = Visibility.Collapsed;
         ConnectionView.Visibility = Visibility.Visible;
         FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Connexion & appairage";
         PageSubtitle.Text = "QR, PIN et identité de sécurité RemoteFlow.";
@@ -122,6 +129,7 @@ public partial class MainWindow : Window
         DashboardView.Visibility = Visibility.Collapsed;
         ConnectionView.Visibility = Visibility.Collapsed;
         FilesView.Visibility = Visibility.Visible;
+        ScreensView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Fichiers";
         PageSubtitle.Text = "Gestion native du dossier RemoteFlow et transferts avec le client connecté.";
@@ -129,8 +137,116 @@ public partial class MainWindow : Window
         RefreshFiles();
     }
 
-    private void Screens_Click(object sender, RoutedEventArgs e) =>
-        ShowPage("Multi-écrans", "Détection des moniteurs Windows et streaming distant.");
+    private void Screens_Click(object sender, RoutedEventArgs e)
+    {
+        DashboardView.Visibility = Visibility.Collapsed;
+        ConnectionView.Visibility = Visibility.Collapsed;
+        FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Visible;
+        PlaceholderView.Visibility = Visibility.Collapsed;
+        PageTitle.Text = "Multi-écrans";
+        PageSubtitle.Text = "Moniteurs Windows, sélection d’écran et streaming distant natif.";
+        RefreshScreens();
+    }
+
+    private void RefreshScreens_Click(object sender, RoutedEventArgs e) => RefreshScreens();
+
+    private void RefreshScreens()
+    {
+        try
+        {
+            var selectedIndex = (ScreensList.SelectedItem as WindowsMonitorInfo)?.Index;
+            var monitors = _core.Server.ListMonitors();
+
+            _screenItems.Clear();
+            foreach (var monitor in monitors)
+                _screenItems.Add(monitor);
+
+            if (selectedIndex.HasValue)
+            {
+                var selected = _screenItems.FirstOrDefault(x => x.Index == selectedIndex.Value);
+                if (selected is not null)
+                    ScreensList.SelectedItem = selected;
+            }
+
+            ScreensDetectedText.Text = $"{_screenItems.Count:N0} moniteur(s) Windows détecté(s).";
+            if (_screenItems.Count == 0)
+                ScreensSelectedText.Text = "Aucun moniteur détecté.";
+            else if (!CaptureAllScreens.IsChecked.GetValueOrDefault() && ScreensList.SelectedItem is null)
+                ScreensList.SelectedIndex = _screenItems[0].Index;
+        }
+        catch (Exception ex)
+        {
+            ScreensDetectedText.Text = $"Détection impossible : {ex.Message}";
+            ScreensSelectedText.Text = "Impossible de charger les écrans.";
+        }
+    }
+
+    private void ScreensList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ScreensList.SelectedItem is WindowsMonitorInfo monitor)
+            ScreensSelectedText.Text = $"Écran sélectionné : {monitor.DisplayIndex} — {monitor.Name} • {monitor.Resolution}";
+        else
+            ScreensSelectedText.Text = "Sélectionnez un écran à diffuser.";
+    }
+
+    private static int GetComboInt(ComboBox comboBox)
+    {
+        if (comboBox.SelectedItem is ComboBoxItem item &&
+            int.TryParse(item.Content?.ToString(), out var value))
+            return value;
+
+        throw new InvalidOperationException("Réglage de streaming invalide.");
+    }
+
+    private async void StartScreenStreaming_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var useVirtualDesktop = CaptureAllScreens.IsChecked == true;
+            var screenIndex = useVirtualDesktop
+                ? -1
+                : (ScreensList.SelectedItem as WindowsMonitorInfo)?.Index ?? -2;
+
+            if (screenIndex == -2)
+            {
+                ScreensStreamStatus.Text = "Sélectionnez un écran avant de démarrer le streaming.";
+                return;
+            }
+
+            var fps = GetComboInt(ScreensFpsCombo);
+            var maxWidth = GetComboInt(ScreensWidthCombo);
+            var quality = GetComboInt(ScreensQualityCombo);
+
+            ScreensStreamStatus.Text = "Démarrage du streaming…";
+            var result = await _core.Server.StartScreenStreamingAsync(screenIndex, fps, maxWidth, quality);
+            ScreensStreamStatus.Text = result.Ok
+                ? result.Summary ?? "Streaming d’écran démarré."
+                : result.Error ?? "Impossible de démarrer le streaming.";
+        }
+        catch (Exception ex)
+        {
+            ScreensStreamStatus.Text = $"Démarrage impossible : {ex.Message}";
+        }
+    }
+
+    private async void StopScreenStreaming_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ScreensStreamStatus.Text = "Arrêt du streaming…";
+            var result = await _core.Server.StopScreenStreamingAsync();
+            ScreensStreamStatus.Text = result.Ok
+                ? result.Summary ?? "Streaming d’écran arrêté."
+                : result.Error ?? "Impossible d’arrêter le streaming.";
+        }
+        catch (Exception ex)
+        {
+            ScreensStreamStatus.Text = $"Arrêt impossible : {ex.Message}";
+        }
+    }
+
+
 
     private void Macros_Click(object sender, RoutedEventArgs e) =>
         ShowPage("Macros", "Raccourcis et commandes RemoteFlow natifs côté Windows.");

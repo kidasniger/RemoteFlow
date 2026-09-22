@@ -52,6 +52,67 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     public void ImportLocalFile(string sourcePath) => _files.ImportFile(sourcePath);
 
+    public IReadOnlyList<WindowsMonitorInfo> ListMonitors() =>
+        WindowsMonitorManager.GetMonitors();
+
+    public async Task<(bool Ok, string? Error, string? Summary)> StartScreenStreamingAsync(
+        int screenIndex,
+        int fps,
+        int maxWidth,
+        int quality,
+        CancellationToken cancellationToken = default)
+    {
+        ConnectedClient? client;
+        lock (_clientsGate)
+            client = _connectedClients.FirstOrDefault(x => x.IsAuthorized());
+
+        if (client is null)
+            return (false, "Aucun client RemoteFlow autorisé n'est connecté.", null);
+
+        try
+        {
+            var summary = await client.ScreenStreaming.StartAsync(
+                fps,
+                maxWidth,
+                quality,
+                screenIndex,
+                cancellationToken);
+            StatusChanged?.Invoke(this, summary);
+            return (true, null, summary);
+        }
+        catch (Exception ex) when (
+            ex is InvalidOperationException ||
+            ex is IOException ||
+            ex is SocketException)
+        {
+            return (false, ex.Message, null);
+        }
+    }
+
+    public async Task<(bool Ok, string? Error, string? Summary)> StopScreenStreamingAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ConnectedClient? client;
+        lock (_clientsGate)
+            client = _connectedClients.FirstOrDefault(x => x.IsAuthorized());
+
+        if (client is null)
+            return (false, "Aucun client RemoteFlow autorisé n'est connecté.", null);
+
+        try
+        {
+            var summary = await client.ScreenStreaming.StopAsync();
+            StatusChanged?.Invoke(this, summary);
+            return (true, null, summary);
+        }
+        catch (Exception ex) when (
+            ex is IOException ||
+            ex is SocketException)
+        {
+            return (false, ex.Message, null);
+        }
+    }
+
     public async Task<(bool Ok, string? Error, string? TransferId)> SendFileToConnectedClientAsync(
         string relativePath,
         long offset = 0,
@@ -187,7 +248,11 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         AddClipboardSession(clipboardSession);
         await using var screenStreaming = new DesktopStreamController(session, cancellationToken);
         await using var fileTransfers = _files.CreateSession();
-        var connectedClient = new ConnectedClient(session, fileTransfers, () => sessionPaired);
+        var connectedClient = new ConnectedClient(
+            session,
+            fileTransfers,
+            screenStreaming,
+            () => sessionPaired);
         AddConnectedClient(connectedClient);
 
         try
@@ -354,6 +419,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                             message.Fps ?? 8,
                             message.MaxWidth ?? 1280,
                             message.Quality ?? 60,
+                            message.ScreenIndex ?? -1,
                             cancellationToken);
 
                         MessageReceived?.Invoke(
@@ -706,5 +772,6 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     private sealed record ConnectedClient(
         JsonLineSession Session,
         FileTransferManager.FileTransferSession FileTransfers,
+        DesktopStreamController ScreenStreaming,
         Func<bool> IsAuthorized);
 }

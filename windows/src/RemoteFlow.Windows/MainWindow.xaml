@@ -310,6 +310,131 @@
                     </Border>
                 </Grid>
 
+
+                <Grid x:Name="ScreensView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="0" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Moniteurs Windows" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="ScreensDetectedText"
+                                           Text="Détection en cours…"
+                                           Foreground="#94A3B8"
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Content="Actualiser les écrans"
+                                    Click="RefreshScreens_Click"
+                                    Padding="14,8"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="1" Padding="8">
+                        <ListView x:Name="ScreensList"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  Foreground="#E2E8F0"
+                                  SelectionMode="Single"
+                                  SelectionChanged="ScreensList_SelectionChanged">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="#" DisplayMemberBinding="{Binding DisplayIndex}" Width="48"/>
+                                    <GridViewColumn Header="Écran" DisplayMemberBinding="{Binding Name}" Width="260"/>
+                                    <GridViewColumn Header="Identifiant" DisplayMemberBinding="{Binding DeviceName}" Width="170"/>
+                                    <GridViewColumn Header="Résolution" DisplayMemberBinding="{Binding Resolution}" Width="130"/>
+                                    <GridViewColumn Header="Position" DisplayMemberBinding="{Binding Position}" Width="125"/>
+                                    <GridViewColumn Header="Écran principal" DisplayMemberBinding="{Binding PrimaryLabel}" Width="125"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="2" Margin="0,14,0,0" Padding="14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock x:Name="ScreensSelectedText"
+                                           Text="Sélectionnez un écran à diffuser."
+                                           FontSize="12"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="ScreensStreamStatus"
+                                           Text="Aucun streaming d’écran actif."
+                                           Foreground="#94A3B8"
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                <TextBlock Text="FPS" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="ScreensFpsCombo" Width="78" SelectedIndex="2" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="1"/>
+                                    <ComboBoxItem Content="5"/>
+                                    <ComboBoxItem Content="8"/>
+                                    <ComboBoxItem Content="10"/>
+                                    <ComboBoxItem Content="15"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Margin="10,0,0,0">
+                                <TextBlock Text="Largeur max" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="ScreensWidthCombo" Width="100" SelectedIndex="2" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="640"/>
+                                    <ComboBoxItem Content="960"/>
+                                    <ComboBoxItem Content="1280"/>
+                                    <ComboBoxItem Content="1600"/>
+                                    <ComboBoxItem Content="1920"/>
+                                    <ComboBoxItem Content="2560"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="3" Margin="10,0,0,0">
+                                <TextBlock Text="Qualité JPEG" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="ScreensQualityCombo" Width="92" SelectedIndex="2" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="30"/>
+                                    <ComboBoxItem Content="45"/>
+                                    <ComboBoxItem Content="60"/>
+                                    <ComboBoxItem Content="75"/>
+                                    <ComboBoxItem Content="90"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <CheckBox x:Name="CaptureAllScreens"
+                                      Grid.Column="4"
+                                      Content="Bureau complet"
+                                      VerticalAlignment="Bottom"
+                                      Foreground="#CBD5E1"
+                                      Margin="14,0,8,8"/>
+
+                            <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                <Button Content="Démarrer"
+                                        Click="StartScreenStreaming_Click"
+                                        Padding="14,8"
+                                        Margin="8,0,0,0"/>
+                                <Button Content="Arrêter"
+                                        Click="StopScreenStreaming_Click"
+                                        Padding="14,8"
+                                        Margin="8,0,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
                 <StackPanel x:Name="PlaceholderView" Visibility="Collapsed">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
