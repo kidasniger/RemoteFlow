@@ -440,7 +440,7 @@ public sealed class FileTransferManager
         private string ResolveSafePath(string requestedPath)
         {
             var normalized = requestedPath
-                .Replace('\', Path.DirectorySeparatorChar)
+                .Replace((char)92, Path.DirectorySeparatorChar)
                 .Replace('/', Path.DirectorySeparatorChar)
                 .Trim();
 
