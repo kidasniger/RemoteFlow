@@ -210,3 +210,12 @@ Les métriques affichées sont actualisées automatiquement chaque seconde :
 La carte auparavant dédiée à une latence fixe de démonstration affiche désormais le nombre réel de clients connectés. La latence réseau distante n'est pas inventée : le protocole actuel ne définit pas encore de mesure RTT client/serveur exploitable par le tableau de bord.
 
 Aucune modification Android n'est requise pour cette phase.
+## Phase 17 — Journal d'activité Windows
+
+Une page WPF native `Journal d'activité` conserve un historique local des événements RemoteFlow dans `%APPDATA%\\RemoteFlow\\activity-log.json`.
+
+Le journal est limité à 500 entrées et couvre les connexions/déconnexions, commandes distantes, transferts de fichiers, webcam, écran, tableau blanc, macro, presse-papiers, serveur et paramètres.
+
+Le contenu du presse-papiers n'est jamais enregistré : seuls l'état et les métadonnées de synchronisation sont journalisés.
+
+La page permet le filtrage par catégorie, l'effacement du journal et l'export CSV.

@@ -25,6 +25,8 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<WindowsMonitorInfo> _screenItems = new();
     private readonly ObservableCollection<RemoteFlowMacro> _macroItems = new();
     private readonly ObservableCollection<RemoteFlowMacroStep> _macroSteps = new();
+    private readonly ObservableCollection<RemoteFlowActivityEntry> _activityItems = new();
+    private readonly ActivityLogManager _activityLog = new();
     private string? _activeFileTransferId;
     private string? _editingMacroId;
     private CancellationTokenSource? _macroCts;
@@ -42,10 +44,12 @@ public partial class MainWindow : Window
         _core.Server.WhiteboardStrokeReceived += Server_WhiteboardStrokeReceived;
         _core.Server.WebcamFrameReceived += Server_WebcamFrameReceived;
         _core.Server.WebcamStatusChanged += Server_WebcamStatusChanged;
+        _core.Server.MessageReceived += Server_MessageReceived;
         FilesList.ItemsSource = _fileItems;
         ScreensList.ItemsSource = _screenItems;
         MacrosList.ItemsSource = _macroItems;
         MacroStepsList.ItemsSource = _macroSteps;
+        ActivityLogList.ItemsSource = _activityItems;
         WhiteboardCanvas.DefaultDrawingAttributes = CreateWhiteboardDrawingAttributes("#2563EB", 6);
         WhiteboardCanvas.StrokeCollected += WhiteboardCanvas_StrokeCollected;
         WebcamPreviewImage.Visibility = Visibility.Collapsed;
@@ -68,6 +72,7 @@ public partial class MainWindow : Window
         Closed += MainWindow_Closed;
 
         RefreshPairingUi();
+        RefreshActivityLog();
         _ = StartRemoteFlowServerAsync();
     }
 
@@ -103,6 +108,13 @@ public partial class MainWindow : Window
 
     private void Server_StatusChanged(object? sender, string status)
     {
+        AddActivity(
+            status.StartsWith("Client connecté", StringComparison.Ordinal) ||
+            status.StartsWith("Client déconnecté", StringComparison.Ordinal)
+                ? "Connexion"
+                : "Serveur",
+            "Windows",
+            status);
         Dispatcher.Invoke(() => ConnectionStatus.Text = status);
     }
 
@@ -113,6 +125,7 @@ public partial class MainWindow : Window
             DashboardClipboardSecondaryStatus.Text = status;
             PairingClipboardStatus.Text = status;
             DashboardClipboardValue.Text = _core.Server.ClipboardSyncEnabled ? "ACTIF" : "ARRÊTÉ";
+            AddActivity("Presse-papiers", "Windows", status);
         });
     }
 
@@ -198,6 +211,7 @@ public partial class MainWindow : Window
 
     private void Core_StateChanged(object? sender, ConnectionState state)
     {
+        AddActivity("Connexion", "Windows", $"État RemoteFlow : {state}.");
         Dispatcher.Invoke(() =>
         {
             if (state == ConnectionState.Connected)
@@ -217,6 +231,7 @@ public partial class MainWindow : Window
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Visible;
         PageTitle.Text = title;
         PageSubtitle.Text = "RemoteFlow Windows natif";
@@ -234,6 +249,7 @@ public partial class MainWindow : Window
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau de bord";
         PageSubtitle.Text = "Centre de contrôle RemoteFlow Windows.";
@@ -251,6 +267,7 @@ public partial class MainWindow : Window
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Connexion & appairage";
         PageSubtitle.Text = "QR, PIN et identité de sécurité RemoteFlow.";
@@ -267,6 +284,7 @@ public partial class MainWindow : Window
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Fichiers";
         PageSubtitle.Text = "Gestion native du dossier RemoteFlow et transferts avec le client connecté.";
@@ -284,6 +302,7 @@ public partial class MainWindow : Window
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Multi-écrans";
         PageSubtitle.Text = "Moniteurs Windows, sélection d’écran et streaming distant natif.";
@@ -399,6 +418,7 @@ public partial class MainWindow : Window
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Macros";
         PageSubtitle.Text = "Séquences d’actions natives enregistrées localement et exécutables sur Windows.";
@@ -416,6 +436,7 @@ public partial class MainWindow : Window
         WhiteboardView.Visibility = Visibility.Visible;
         WebcamView.Visibility = Visibility.Collapsed;
         SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau blanc";
         PageSubtitle.Text = "Dessin natif Windows et partage de tracés avec les clients RemoteFlow compatibles.";
@@ -562,6 +583,8 @@ public partial class MainWindow : Window
 
     private void Server_WhiteboardStrokeReceived(object? sender, RemoteFlowWhiteboardStroke stroke)
     {
+        AddActivity("Tableau blanc", stroke.Source, $"Tracé reçu • {stroke.Points.Count:N0} points.");
+
         Dispatcher.Invoke(() =>
         {
             if (WhiteboardCanvas.ActualWidth < 1 || WhiteboardCanvas.ActualHeight < 1)
@@ -1114,6 +1137,16 @@ public partial class MainWindow : Window
 
     private void Server_FileTransferStatusChanged(object? sender, RemoteFlowFileTransferState state)
     {
+        AddActivity("Fichier", "RemoteFlow", state.State switch
+        {
+            "started" => $"Transfert démarré : {state.FileName ?? state.TransferId}",
+            "resumed" => $"Transfert repris : {state.FileName ?? state.TransferId}",
+            "progress" => $"Transfert en cours : {state.Offset:N0}/{state.TotalBytes:N0} octets",
+            "completed" => $"Transfert terminé : {state.FileName ?? state.TransferId}",
+            "cancelled" => $"Transfert annulé : {state.FileName ?? state.TransferId}",
+            _ => $"Transfert {state.State} : {state.FileName ?? state.TransferId}"
+        });
+
         Dispatcher.Invoke(() =>
         {
             if (!string.Equals(state.TransferId, _activeFileTransferId, StringComparison.Ordinal))
@@ -1272,6 +1305,7 @@ public partial class MainWindow : Window
 
     private void Server_WebcamStatusChanged(object? sender, string status)
     {
+        AddActivity("Webcam", "Windows", status);
         Dispatcher.Invoke(() =>
         {
             WebcamStatusText.Text = status;
@@ -1376,6 +1410,9 @@ public partial class MainWindow : Window
             SettingsStatusText.Text = portChanged
                 ? $"Paramètres enregistrés • serveur redémarré sur le port {tcpPort}."
                 : "Paramètres enregistrés et appliqués.";
+            AddActivity("Paramètres", "Windows", portChanged
+                ? $"Paramètres enregistrés • port TCP {tcpPort}."
+                : "Paramètres enregistrés.");
             ConnectionStatus.Text = $"Serveur TCP • port {_core.PairingPort}";
         }
         catch (Exception ex)
@@ -1409,11 +1446,141 @@ public partial class MainWindow : Window
             RefreshPairingUi();
             RefreshSettingsUi();
             SettingsStatusText.Text = $"Paramètres réinitialisés • serveur sur le port {_core.PairingPort}.";
+            AddActivity("Paramètres", "Windows", "Paramètres réinitialisés aux valeurs par défaut.");
         }
         catch (Exception ex)
         {
             SettingsStatusText.Text = $"Réinitialisation impossible : {ex.Message}";
         }
+    }
+
+    private void ActivityLog_Click(object sender, RoutedEventArgs e)
+    {
+        DashboardView.Visibility = Visibility.Collapsed;
+        ConnectionView.Visibility = Visibility.Collapsed;
+        FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Collapsed;
+        MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
+        ActivityLogView.Visibility = Visibility.Visible;
+        PlaceholderView.Visibility = Visibility.Collapsed;
+        PageTitle.Text = "Journal d'activité";
+        PageSubtitle.Text = "Historique local des connexions, commandes et opérations RemoteFlow.";
+        RefreshActivityLog();
+    }
+
+    private void ActivityLogFilter_Changed(object sender, SelectionChangedEventArgs e) =>
+        RefreshActivityLog();
+
+    private void RefreshActivityLog_Click(object sender, RoutedEventArgs e) =>
+        RefreshActivityLog();
+
+    private void RefreshActivityLog()
+    {
+        var filter = (ActivityLogFilterCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Tous";
+        var entries = _activityLog.Snapshot();
+
+        _activityItems.Clear();
+        foreach (var entry in entries.Where(x =>
+            filter == "Tous" ||
+            string.Equals(x.Category, filter, StringComparison.OrdinalIgnoreCase)))
+        {
+            _activityItems.Add(entry);
+        }
+
+        ActivityLogSummaryText.Text = _activityItems.Count switch
+        {
+            0 => "Aucun événement",
+            1 => "1 événement affiché",
+            _ => $"{_activityItems.Count:N0} événements affichés"
+        };
+    }
+
+    private void ClearActivityLog_Click(object sender, RoutedEventArgs e)
+    {
+        var answer = MessageBox.Show(
+            this,
+            "Effacer tout le journal d'activité local ?",
+            "Effacer le journal",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        _activityLog.Clear();
+        RefreshActivityLog();
+        ActivityLogStatusText.Text = "Journal effacé. Les nouveaux événements seront enregistrés localement.";
+    }
+
+    private void ExportActivityLog_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Fichier CSV (*.csv)|*.csv",
+            DefaultExt = ".csv",
+            AddExtension = true,
+            FileName = $"RemoteFlow-Activity-{DateTime.Now:yyyyMMdd-HHmmss}.csv"
+        };
+
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            using var writer = new StreamWriter(dialog.FileName, false, new System.Text.UTF8Encoding(true));
+            writer.WriteLine("timestamp_local,category,source,level,summary");
+
+            foreach (var entry in _activityLog.Snapshot())
+            {
+                writer.WriteLine(string.Join(",",
+                    CsvEscape(entry.LocalTimestamp),
+                    CsvEscape(entry.Category),
+                    CsvEscape(entry.Source),
+                    CsvEscape(entry.Level),
+                    CsvEscape(entry.Summary)));
+            }
+
+            ActivityLogStatusText.Text = $"Export CSV terminé : {Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception ex)
+        {
+            ActivityLogStatusText.Text = $"Export CSV impossible : {ex.Message}";
+        }
+    }
+
+    private void AddActivity(string category, string source, string summary, string level = "Info")
+    {
+        _activityLog.Add(category, source, summary, level);
+
+        if (ActivityLogView.Visibility == Visibility.Visible)
+            Dispatcher.BeginInvoke(new Action(RefreshActivityLog));
+    }
+
+    private void Server_MessageReceived(object? sender, RemoteFlowServerEvent evt) =>
+        AddActivity(
+            evt.Action switch
+            {
+                "clipboard" => "Presse-papiers",
+                "whiteboard" => "Tableau blanc",
+                "webcam" => "Webcam",
+                "screen" => "Écran",
+                "macro" => "Macro",
+                "files" => "Fichier",
+                _ => "Commande"
+            },
+            "Client",
+            string.IsNullOrWhiteSpace(evt.Summary) ? evt.Action : evt.Summary);
+
+    private static string CsvEscape(string value)
+    {
+        var escaped = value.Replace(""", """");
+        return escaped.Contains(',') || escaped.Contains('"') || escaped.Contains('
+') || escaped.Contains('')
+            ? $""{escaped}""
+            : escaped;
     }
 
     private void Clipboard_Click(object sender, RoutedEventArgs e) =>
@@ -1454,6 +1621,7 @@ public partial class MainWindow : Window
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
         _dashboardMetricsTimer.Stop();
+        _activityLog.Dispose();
         try { await _core.Server.StopWebcamAsync(); } catch { }
         try { await _core.DisposeAsync(); } catch { }
     }

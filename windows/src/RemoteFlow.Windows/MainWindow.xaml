@@ -58,6 +58,7 @@
                     <Button Style="{StaticResource NavButton}" Click="Whiteboard_Click" Content="✎   Tableau blanc"/>
                     <Button Style="{StaticResource NavButton}" Click="Webcam_Click" Content="◉   Webcam"/>
                     <Button Style="{StaticResource NavButton}" Click="Clipboard_Click" Content="▣   Presse-papiers"/>
+                    <Button Style="{StaticResource NavButton}" Click="ActivityLog_Click" Content="☷   Activité"/>
                     <Button Style="{StaticResource NavButton}" Click="Settings_Click" Content="⚙   Paramètres"/>
                 </StackPanel>
 
@@ -941,6 +942,82 @@
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
+                </Grid>
+
+                <Grid x:Name="ActivityLogView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="0" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="210"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Journal d'activité" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="ActivityLogSummaryText"
+                                           Text="Aucun événement"
+                                           Foreground="#94A3B8"
+                                           FontSize="11"
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="Catégorie" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="ActivityLogFilterCombo"
+                                          Margin="0,4,0,0"
+                                          SelectedIndex="0"
+                                          SelectionChanged="ActivityLogFilter_Changed">
+                                    <ComboBoxItem Content="Tous"/>
+                                    <ComboBoxItem Content="Serveur"/>
+                                    <ComboBoxItem Content="Connexion"/>
+                                    <ComboBoxItem Content="Commande"/>
+                                    <ComboBoxItem Content="Fichier"/>
+                                    <ComboBoxItem Content="Webcam"/>
+                                    <ComboBoxItem Content="Presse-papiers"/>
+                                    <ComboBoxItem Content="Tableau blanc"/>
+                                    <ComboBoxItem Content="Écran"/>
+                                    <ComboBoxItem Content="Macro"/>
+                                    <ComboBoxItem Content="Système"/>
+                                    <ComboBoxItem Content="Paramètres"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="Actualiser" Click="RefreshActivityLog_Click" Padding="12,8" Margin="10,18,0,0"/>
+                            <Button Grid.Column="3" Content="Exporter CSV" Click="ExportActivityLog_Click" Padding="12,8" Margin="8,18,0,0"/>
+                            <Button Grid.Column="4" Content="Effacer" Click="ClearActivityLog_Click" Padding="12,8" Margin="8,18,0,0"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="1" Padding="8">
+                        <ListView x:Name="ActivityLogList"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  Foreground="#E2E8F0"
+                                  SelectionMode="Single">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Heure" DisplayMemberBinding="{Binding LocalTimestamp}" Width="165"/>
+                                    <GridViewColumn Header="Type" DisplayMemberBinding="{Binding Category}" Width="125"/>
+                                    <GridViewColumn Header="Source" DisplayMemberBinding="{Binding Source}" Width="120"/>
+                                    <GridViewColumn Header="Niveau" DisplayMemberBinding="{Binding Level}" Width="80"/>
+                                    <GridViewColumn Header="Événement" DisplayMemberBinding="{Binding Summary}" Width="560"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="2" Margin="0,14,0,0" Padding="12">
+                        <TextBlock x:Name="ActivityLogStatusText"
+                                   Text="Journal local actif. Le contenu du presse-papiers n'est jamais enregistré."
+                                   Foreground="#22D3EE"
+                                   TextWrapping="Wrap"/>
+                    </Border>
                 </Grid>
 
                 <StackPanel x:Name="PlaceholderView" Visibility="Collapsed">
