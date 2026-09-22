@@ -13,6 +13,8 @@ public sealed class FileTransferManager
 
     private readonly string _rootPath;
 
+    public event EventHandler<RemoteFlowFileTransferState>? TransferStatusChanged;
+
     public FileTransferManager()
     {
         _rootPath = Path.Combine(
@@ -46,6 +48,28 @@ public sealed class FileTransferManager
         }
 
         return result;
+    }
+
+
+    public string GetLocalFilePath(string relativePath) => ResolveSafePath(relativePath);
+
+    public void DeleteFile(string relativePath)
+    {
+        var path = ResolveSafePath(relativePath);
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Fichier introuvable.", relativePath);
+
+        File.Delete(path);
+    }
+
+    public void ImportFile(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            throw new FileNotFoundException("Fichier source introuvable.", sourcePath);
+
+        var targetName = Path.GetFileName(sourcePath);
+        var targetPath = ResolveSafePath(targetName);
+        File.Copy(sourcePath, targetPath, true);
     }
 
     public FileTransferSession CreateSession() => new(_rootPath);
@@ -126,13 +150,15 @@ public sealed class FileTransferManager
                     stream);
             }
 
-            return Task.FromResult(new RemoteFlowFileTransferState(
+            var startedState = new RemoteFlowFileTransferState(
                 Event: "file_transfer",
                 TransferId: transferId,
                 State: offset == 0 ? "started" : "resumed",
                 Offset: offset,
                 TotalBytes: size,
-                FileName: fileName));
+                FileName: fileName);
+            TransferStatusChanged?.Invoke(this, startedState);
+            return Task.FromResult(startedState);
         }
 
         public async Task<RemoteFlowFileTransferState> WriteChunkAsync(
@@ -171,13 +197,15 @@ public sealed class FileTransferManager
             await upload.Stream.WriteAsync(bytes, cancellationToken);
             upload.Offset += bytes.LongLength;
 
-            return new RemoteFlowFileTransferState(
+            var progressState = new RemoteFlowFileTransferState(
                 Event: "file_transfer",
                 TransferId: transferId,
                 State: "progress",
                 Offset: upload.Offset,
                 TotalBytes: upload.TotalBytes,
                 FileName: upload.FileName);
+            TransferStatusChanged?.Invoke(this, progressState);
+            return progressState;
         }
 
         public async Task<RemoteFlowFileTransferState> FinishUploadAsync(
@@ -201,13 +229,15 @@ public sealed class FileTransferManager
 
             File.Move(upload.PartPath, upload.FinalPath, true);
 
-            return new RemoteFlowFileTransferState(
+            var completedState = new RemoteFlowFileTransferState(
                 Event: "file_transfer",
                 TransferId: transferId,
                 State: "completed",
                 Offset: upload.Offset,
                 TotalBytes: upload.TotalBytes,
                 FileName: upload.FileName);
+            TransferStatusChanged?.Invoke(this, completedState);
+            return completedState;
         }
 
         public Task CancelUploadAsync(string transferId)
@@ -267,13 +297,15 @@ public sealed class FileTransferManager
                 offset,
                 cts);
 
-            return new RemoteFlowFileTransferState(
+            var downloadStartedState = new RemoteFlowFileTransferState(
                 Event: "file_transfer",
                 TransferId: transferId,
                 State: "started",
                 Offset: offset,
                 TotalBytes: fileInfo.Length,
                 FileName: fileName);
+            TransferStatusChanged?.Invoke(this, downloadStartedState);
+            return downloadStartedState;
         }
 
         public Task CancelDownloadAsync(string transferId)
@@ -326,34 +358,43 @@ public sealed class FileTransferManager
                         cts.Token);
 
                     currentOffset += read;
+                    TransferStatusChanged?.Invoke(
+                        this,
+                        new RemoteFlowFileTransferState(
+                            Event: "file_transfer",
+                            TransferId: transferId,
+                            State: "progress",
+                            Offset: currentOffset,
+                            TotalBytes: totalBytes,
+                            FileName: fileName));
                 }
 
                 if (!cts.IsCancellationRequested)
                 {
-                    await session.SendAsync(
-                        new RemoteFlowFileTransferState(
-                            Event: "file_transfer",
-                            TransferId: transferId,
-                            State: "completed",
-                            Offset: currentOffset,
-                            TotalBytes: totalBytes,
-                            FileName: fileName),
-                        cts.Token);
+                    var completedState = new RemoteFlowFileTransferState(
+                        Event: "file_transfer",
+                        TransferId: transferId,
+                        State: "completed",
+                        Offset: currentOffset,
+                        TotalBytes: totalBytes,
+                        FileName: fileName);
+                    await session.SendAsync(completedState, cts.Token);
+                    TransferStatusChanged?.Invoke(this, completedState);
                 }
             }
             catch (OperationCanceledException)
             {
                 try
                 {
-                    await session.SendAsync(
-                        new RemoteFlowFileTransferState(
-                            Event: "file_transfer",
-                            TransferId: transferId,
-                            State: "cancelled",
-                            Offset: offset,
-                            TotalBytes: 0,
-                            FileName: fileName),
-                        CancellationToken.None);
+                    var cancelledState = new RemoteFlowFileTransferState(
+                        Event: "file_transfer",
+                        TransferId: transferId,
+                        State: "cancelled",
+                        Offset: offset,
+                        TotalBytes: 0,
+                        FileName: fileName);
+                    await session.SendAsync(cancelledState, CancellationToken.None);
+                    TransferStatusChanged?.Invoke(this, cancelledState);
                 }
                 catch
                 {

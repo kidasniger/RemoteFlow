@@ -14,10 +14,12 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly object _clipboardSessionsGate = new();
+    private readonly object _clientsGate = new();
     private readonly PairingManager _pairing;
     private readonly FileTransferManager _files;
     private readonly ClipboardSyncManager _clipboard;
     private readonly List<ClipboardSession> _clipboardSessions = new();
+    private readonly List<ConnectedClient> _connectedClients = new();
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptTask;
@@ -28,6 +30,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<string>? ClipboardStatusChanged;
+    public event EventHandler<RemoteFlowFileTransferState>? FileTransferStatusChanged;
     public event EventHandler<RemoteFlowServerEvent>? MessageReceived;
 
     public RemoteFlowServer(PairingManager pairing)
@@ -36,6 +39,71 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         _files = new FileTransferManager();
         _clipboard = new ClipboardSyncManager();
         _clipboard.Changed += Clipboard_Changed;
+        _files.TransferStatusChanged += Files_TransferStatusChanged;
+    }
+
+    public string FilesRootPath => _files.RootPath;
+
+    public IReadOnlyList<RemoteFlowFileInfo> ListLocalFiles() => _files.ListFiles();
+
+    public string GetLocalFilePath(string relativePath) => _files.GetLocalFilePath(relativePath);
+
+    public void DeleteLocalFile(string relativePath) => _files.DeleteFile(relativePath);
+
+    public void ImportLocalFile(string sourcePath) => _files.ImportFile(sourcePath);
+
+    public async Task<(bool Ok, string? Error, string? TransferId)> SendFileToConnectedClientAsync(
+        string relativePath,
+        long offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ConnectedClient? client;
+        lock (_clientsGate)
+            client = _connectedClients.FirstOrDefault(x => x.IsAuthorized());
+
+        if (client is null)
+            return (false, "Aucun client RemoteFlow autorisé n'est connecté.", null);
+
+        var transferId = $"win-{Guid.NewGuid():N}";
+        try
+        {
+            await client.FileTransfers.StartDownloadAsync(
+                client.Session,
+                transferId,
+                relativePath,
+                offset,
+                cancellationToken);
+
+            return (true, null, transferId);
+        }
+        catch (Exception ex) when (
+            ex is InvalidDataException ||
+            ex is UnauthorizedAccessException ||
+            ex is FileNotFoundException ||
+            ex is IOException)
+        {
+            return (false, ex.Message, null);
+        }
+    }
+
+    public async Task CancelFileTransferAsync(string transferId)
+    {
+        if (string.IsNullOrWhiteSpace(transferId))
+            return;
+
+        ConnectedClient[] clients;
+        lock (_clientsGate)
+            clients = _connectedClients.ToArray();
+
+        foreach (var client in clients)
+        {
+            try { await client.FileTransfers.CancelDownloadAsync(transferId); } catch { }
+        }
+    }
+
+    private void Files_TransferStatusChanged(object? sender, RemoteFlowFileTransferState state)
+    {
+        FileTransferStatusChanged?.Invoke(this, state);
     }
 
     public Task StartAsync(int port = RemoteFlowProtocol.DefaultPort)
@@ -119,6 +187,8 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         AddClipboardSession(clipboardSession);
         await using var screenStreaming = new DesktopStreamController(session, cancellationToken);
         await using var fileTransfers = _files.CreateSession();
+        var connectedClient = new ConnectedClient(session, fileTransfers, () => sessionPaired);
+        AddConnectedClient(connectedClient);
 
         try
         {
@@ -377,10 +447,24 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         finally
         {
             RemoveClipboardSession(clipboardSession);
+            RemoveConnectedClient(connectedClient);
             try { await screenStreaming.StopAsync(); } catch { }
             ActiveConnections = Math.Max(0, ActiveConnections - 1);
             StatusChanged?.Invoke(this, $"Client déconnecté : {client.Client.RemoteEndPoint}");
         }
+    }
+
+
+    private void AddConnectedClient(ConnectedClient client)
+    {
+        lock (_clientsGate)
+            _connectedClients.Add(client);
+    }
+
+    private void RemoveConnectedClient(ConnectedClient client)
+    {
+        lock (_clientsGate)
+            _connectedClients.Remove(client);
     }
 
     private void Clipboard_Changed(object? sender, ClipboardChangedEventArgs e)
@@ -617,5 +701,10 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     private sealed record ClipboardSession(
         JsonLineSession Session,
+        Func<bool> IsAuthorized);
+
+    private sealed record ConnectedClient(
+        JsonLineSession Session,
+        FileTransferManager.FileTransferSession FileTransfers,
         Func<bool> IsAuthorized);
 }

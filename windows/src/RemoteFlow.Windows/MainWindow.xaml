@@ -235,6 +235,81 @@
                     </StackPanel>
                 </Grid>
 
+
+                <Grid x:Name="FilesView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="0" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Dossier RemoteFlow" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="FilesRootPath"
+                                           Foreground="#94A3B8"
+                                           FontFamily="Consolas"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Margin="0,5,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Actualiser" Click="RefreshFiles_Click" Margin="8,0,0,0" Padding="14,8"/>
+                            <Button Grid.Column="2" Content="Ouvrir le dossier" Click="OpenFilesFolder_Click" Margin="8,0,0,0" Padding="14,8"/>
+                            <Button Grid.Column="3" Content="Ajouter un fichier" Click="ImportFile_Click" Margin="8,0,0,0" Padding="14,8"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="1" Padding="8">
+                        <ListView x:Name="FilesList"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  Foreground="#E2E8F0"
+                                  SelectionMode="Single">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Nom" DisplayMemberBinding="{Binding Name}" Width="220"/>
+                                    <GridViewColumn Header="Chemin" DisplayMemberBinding="{Binding RelativePath}" Width="300"/>
+                                    <GridViewColumn Header="Taille (octets)" DisplayMemberBinding="{Binding Size}" Width="120"/>
+                                    <GridViewColumn Header="Modifié (UTC)" DisplayMemberBinding="{Binding LastModifiedUtc}" Width="220"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="2" Margin="0,14,0,0" Padding="14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock x:Name="FilesTransferStatus" Text="Aucun transfert en cours." FontSize="12"/>
+                                <ProgressBar x:Name="FilesTransferProgress"
+                                             Minimum="0"
+                                             Maximum="100"
+                                             Value="0"
+                                             Height="7"
+                                             Margin="0,8,20,0"
+                                             Visibility="Collapsed"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Ouvrir" Click="OpenSelectedFile_Click" Margin="8,0,0,0" Padding="14,8"/>
+                            <Button Grid.Column="2" Content="Envoyer au téléphone" Click="SendSelectedFile_Click" Margin="8,0,0,0" Padding="14,8"/>
+                            <Button Grid.Column="3" Content="Annuler transfert" Click="CancelFileTransfer_Click" Margin="8,0,0,0" Padding="14,8"/>
+                            <Button Grid.Column="4" Content="Supprimer" Click="DeleteSelectedFile_Click" Margin="8,0,0,0" Padding="14,8"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
                 <StackPanel x:Name="PlaceholderView" Visibility="Collapsed">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
