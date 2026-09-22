@@ -816,6 +816,129 @@
                     </Border>
                 </Grid>
 
+                <Grid x:Name="SettingsView" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Paramètres &amp; sécurité" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Les réglages sont conservés localement dans le profil Windows de l'utilisateur."
+                                                   Foreground="#94A3B8"
+                                                   FontSize="11"
+                                                   Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1"
+                                               Text="LOCAL • WINDOWS"
+                                               Foreground="#22D3EE"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="Réseau RemoteFlow" FontSize="15" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Port TCP utilisé par le serveur d'écoute."
+                                               Foreground="#94A3B8"
+                                               FontSize="11"
+                                               Margin="0,4,0,10"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="SettingsTcpPortTextBox"
+                                                 Width="150"
+                                                 HorizontalAlignment="Left"
+                                                 Padding="8,6"
+                                                 ToolTip="Port entre 1024 et 65535"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="Modification appliquée après redémarrage du serveur RemoteFlow."
+                                                   Foreground="#64748B"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   TextWrapping="Wrap"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="Sécurité d'appairage" FontSize="15" FontWeight="SemiBold"/>
+                                    <CheckBox x:Name="SettingsPairingEnforcedCheckBox"
+                                              Content="Exiger un appareil appairé avant toute commande distante"
+                                              Foreground="#CBD5E1"
+                                              Margin="0,12,0,0"/>
+                                    <TextBlock Text="Le PIN et l'identité ECDSA P-256 restent gérés par l'espace de sécurité RemoteFlow."
+                                               Foreground="#94A3B8"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Margin="24,5,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="Synchronisation" FontSize="15" FontWeight="SemiBold"/>
+                                    <CheckBox x:Name="SettingsClipboardSyncCheckBox"
+                                              Content="Activer le presse-papiers universel"
+                                              Foreground="#CBD5E1"
+                                              Margin="0,12,0,0"/>
+                                    <TextBlock Text="Texte uniquement. Désactivé, aucun échange de presse-papiers n'est effectué par le serveur."
+                                               Foreground="#94A3B8"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Margin="24,5,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="Démarrage Windows" FontSize="15" FontWeight="SemiBold"/>
+                                    <CheckBox x:Name="SettingsStartWithWindowsCheckBox"
+                                              Content="Lancer RemoteFlow automatiquement avec Windows"
+                                              Foreground="#CBD5E1"
+                                              Margin="0,12,0,0"/>
+                                    <CheckBox x:Name="SettingsLaunchMinimizedCheckBox"
+                                              Content="Lancer RemoteFlow réduit"
+                                              Foreground="#CBD5E1"
+                                              Margin="0,10,0,0"/>
+                                    <TextBlock Text="Le démarrage automatique utilise le profil utilisateur Windows et n'exige pas de compte cloud."
+                                               Foreground="#94A3B8"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Margin="24,5,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14" Padding="14">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="Enregistrer les paramètres"
+                                                Click="SaveSettings_Click"
+                                                Padding="14,9"/>
+                                        <Button Content="Réinitialiser"
+                                                Click="ResetSettings_Click"
+                                                Padding="14,9"
+                                                Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="SettingsStatusText"
+                                               Text="Aucun changement en attente."
+                                               Foreground="#22D3EE"
+                                               TextWrapping="Wrap"
+                                               Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
                 <StackPanel x:Name="PlaceholderView" Visibility="Collapsed">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>

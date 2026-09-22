@@ -12,6 +12,7 @@ using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Screen;
 using RemoteFlow.Windows.Macros;
 using RemoteFlow.Windows.Webcam;
+using RemoteFlow.Windows.Settings;
 
 namespace RemoteFlow.Windows;
 
@@ -47,7 +48,13 @@ public partial class MainWindow : Window
         WebcamPreviewImage.Visibility = Visibility.Collapsed;
         WebcamPreviewPlaceholder.Visibility = Visibility.Visible;
         _ = RefreshWebcamsAsync();
-                Closed += MainWindow_Closed;
+        if (_core.Settings.Settings.LaunchMinimized ||
+            Environment.GetCommandLineArgs().Any(x => string.Equals(x, "--minimized", StringComparison.OrdinalIgnoreCase)))
+        {
+            WindowState = WindowState.Minimized;
+        }
+
+        Closed += MainWindow_Closed;
 
         RefreshPairingUi();
         _ = StartRemoteFlowServerAsync();
@@ -117,6 +124,7 @@ public partial class MainWindow : Window
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Visible;
         PageTitle.Text = title;
         PageSubtitle.Text = "RemoteFlow Windows natif";
@@ -133,6 +141,7 @@ public partial class MainWindow : Window
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau de bord";
         PageSubtitle.Text = "Centre de contrôle RemoteFlow Windows.";
@@ -148,6 +157,7 @@ public partial class MainWindow : Window
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Connexion & appairage";
         PageSubtitle.Text = "QR, PIN et identité de sécurité RemoteFlow.";
@@ -163,6 +173,7 @@ public partial class MainWindow : Window
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Fichiers";
         PageSubtitle.Text = "Gestion native du dossier RemoteFlow et transferts avec le client connecté.";
@@ -179,6 +190,7 @@ public partial class MainWindow : Window
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Multi-écrans";
         PageSubtitle.Text = "Moniteurs Windows, sélection d’écran et streaming distant natif.";
@@ -293,6 +305,7 @@ public partial class MainWindow : Window
         MacrosView.Visibility = Visibility.Visible;
         WhiteboardView.Visibility = Visibility.Collapsed;
         WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Macros";
         PageSubtitle.Text = "Séquences d’actions natives enregistrées localement et exécutables sur Windows.";
@@ -309,6 +322,7 @@ public partial class MainWindow : Window
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Visible;
         WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau blanc";
         PageSubtitle.Text = "Dessin natif Windows et partage de tracés avec les clients RemoteFlow compatibles.";
@@ -1200,6 +1214,113 @@ public partial class MainWindow : Window
                 WebcamStatusText.Text = $"Aperçu webcam impossible : {ex.Message}";
             }
         }));
+    }
+
+
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        DashboardView.Visibility = Visibility.Collapsed;
+        ConnectionView.Visibility = Visibility.Collapsed;
+        FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Collapsed;
+        MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Visible;
+        PlaceholderView.Visibility = Visibility.Collapsed;
+        PageTitle.Text = "Paramètres & sécurité";
+        PageSubtitle.Text = "Configuration locale du serveur, de la synchronisation et du démarrage Windows.";
+        RefreshSettingsUi();
+    }
+
+    private void RefreshSettingsUi()
+    {
+        SettingsTcpPortTextBox.Text = _core.Settings.Settings.TcpPort.ToString();
+        SettingsPairingEnforcedCheckBox.IsChecked = _core.Pairing.PairingEnforced;
+        SettingsClipboardSyncCheckBox.IsChecked = _core.Server.ClipboardSyncEnabled;
+        SettingsStartWithWindowsCheckBox.IsChecked = WindowsStartupManager.IsEnabled();
+        SettingsLaunchMinimizedCheckBox.IsChecked = _core.Settings.Settings.LaunchMinimized;
+        SettingsStatusText.Text = $"Serveur : {(_core.Server.IsRunning ? $"actif sur le port {_core.PairingPort}" : "arrêté")}.";
+    }
+
+    private async void SaveSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(SettingsTcpPortTextBox.Text.Trim(), out var tcpPort) ||
+            tcpPort < 1024 ||
+            tcpPort > 65535)
+        {
+            SettingsStatusText.Text = "Le port TCP doit être compris entre 1024 et 65535.";
+            return;
+        }
+
+        var startWithWindows = SettingsStartWithWindowsCheckBox.IsChecked == true;
+        var launchMinimized = SettingsLaunchMinimizedCheckBox.IsChecked == true;
+        var pairingEnforced = SettingsPairingEnforcedCheckBox.IsChecked == true;
+        var clipboardSyncEnabled = SettingsClipboardSyncCheckBox.IsChecked == true;
+        var portChanged = tcpPort != _core.PairingPort;
+
+        try
+        {
+            WindowsStartupManager.SetEnabled(startWithWindows);
+
+            _core.Settings.Settings.TcpPort = tcpPort;
+            _core.Settings.Settings.StartWithWindows = startWithWindows;
+            _core.Settings.Settings.LaunchMinimized = launchMinimized;
+            _core.Settings.Settings.Normalize();
+            _core.Settings.Save();
+
+            _core.Pairing.SetPairingEnforced(pairingEnforced);
+            _core.Server.SetClipboardSyncEnabled(clipboardSyncEnabled);
+
+            if (portChanged)
+            {
+                SettingsStatusText.Text = "Redémarrage du serveur sur le nouveau port…";
+                await _core.StopServerAsync();
+                await _core.StartServerAsync();
+                RefreshPairingUi();
+            }
+
+            SettingsStatusText.Text = portChanged
+                ? $"Paramètres enregistrés • serveur redémarré sur le port {tcpPort}."
+                : "Paramètres enregistrés et appliqués.";
+            ConnectionStatus.Text = $"Serveur TCP • port {_core.PairingPort}";
+        }
+        catch (Exception ex)
+        {
+            SettingsStatusText.Text = $"Enregistrement impossible : {ex.Message}";
+        }
+    }
+
+    private async void ResetSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var answer = MessageBox.Show(
+            this,
+            "Réinitialiser les paramètres RemoteFlow aux valeurs par défaut ?",
+            "Réinitialiser les paramètres",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            WindowsStartupManager.SetEnabled(false);
+            _core.Settings.Reset();
+            _core.Pairing.SetPairingEnforced(false);
+            _core.Server.SetClipboardSyncEnabled(true);
+
+            SettingsStatusText.Text = "Réinitialisation en cours…";
+            await _core.StopServerAsync();
+            await _core.StartServerAsync();
+            RefreshPairingUi();
+            RefreshSettingsUi();
+            SettingsStatusText.Text = $"Paramètres réinitialisés • serveur sur le port {_core.PairingPort}.";
+        }
+        catch (Exception ex)
+        {
+            SettingsStatusText.Text = $"Réinitialisation impossible : {ex.Message}";
+        }
     }
 
     private void Clipboard_Click(object sender, RoutedEventArgs e) =>

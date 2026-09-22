@@ -177,3 +177,21 @@ Le flux utilise :
 puis des événements `webcam_frame` contenant l'image JPEG en Base64.
 
 La version Android actuelle n'est pas modifiée dans cette phase ; elle devra décoder `webcam_frame` pour afficher le flux distant dans une prochaine évolution coordonnée.
+
+
+## Phase 15 — Paramètres Windows natifs
+
+La page **Paramètres & sécurité** est maintenant native WPF et persiste ses réglages dans :
+
+`%APPDATA%\RemoteFlow\settings.json`
+
+Réglages :
+- port TCP RemoteFlow, limité à 1024–65535 ;
+- verrouillage par appairage ;
+- synchronisation du presse-papiers ;
+- démarrage automatique avec Windows ;
+- lancement réduit.
+
+Le port est appliqué en redémarrant proprement le serveur TCP. Le démarrage automatique utilise la clé utilisateur Windows `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` et lance RemoteFlow avec l'option `--minimized`.
+
+La réinitialisation remet les réglages applicatifs aux valeurs par défaut, désactive le démarrage automatique, désactive le verrouillage par appairage et réactive le presse-papiers.

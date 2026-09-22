@@ -22,6 +22,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     private readonly ClipboardSyncManager _clipboard;
     private readonly MacroManager _macros;
     private readonly WebcamManager _webcam;
+    private bool _clipboardSyncEnabled = true;
     private int _webcamBroadcastBusy;
     private readonly List<ClipboardSession> _clipboardSessions = new();
     private readonly List<ConnectedClient> _connectedClients = new();
@@ -56,6 +57,17 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     public string FilesRootPath => _files.RootPath;
     public bool IsWebcamRunning => _webcam.IsRunning;
+    public bool ClipboardSyncEnabled => Volatile.Read(ref _clipboardSyncEnabled);
+
+    public void SetClipboardSyncEnabled(bool enabled)
+    {
+        Volatile.Write(ref _clipboardSyncEnabled, enabled);
+        ClipboardStatusChanged?.Invoke(
+            this,
+            enabled
+                ? "Synchronisation du presse-papiers activée."
+                : "Synchronisation du presse-papiers désactivée.");
+    }
 
     public IReadOnlyList<WebcamDeviceInfo> ListWebcams() => WebcamManager.DetectDevices();
 
@@ -436,6 +448,19 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
                 if (string.Equals(message.Action, "clipboard", StringComparison.OrdinalIgnoreCase))
                 {
+                    if (!ClipboardSyncEnabled)
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "clipboard",
+                                Error: "Synchronisation du presse-papiers désactivée dans les paramètres Windows.",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
                     var clipboardText = message.Text;
                     if (clipboardText is null)
                     {
@@ -966,6 +991,9 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     private void Clipboard_Changed(object? sender, ClipboardChangedEventArgs e)
     {
+        if (!ClipboardSyncEnabled)
+            return;
+
         var summary = $"Presse-papiers Windows modifié ({e.Text.Length:N0} caractères)";
         ClipboardStatusChanged?.Invoke(this, summary);
         MessageReceived?.Invoke(
