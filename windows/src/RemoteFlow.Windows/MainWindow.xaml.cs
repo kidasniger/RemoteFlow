@@ -1328,9 +1328,6 @@ public partial class MainWindow : Window
             "Presse-papiers universel",
             "Synchronisation locale du texte entre Windows et les clients RemoteFlow compatibles. Aucun serveur cloud ni Internet n'est utilisé.");
 
-    private void Settings_Click(object sender, RoutedEventArgs e) =>
-        ShowPage("Paramètres & sécurité", "Paramètres système, chiffrement, réseau, UPnP et démarrage.");
-
     private void ConnectNow_Click(object sender, RoutedEventArgs e)
     {
         ConnectionStatus.Text = _core.Server.IsRunning
