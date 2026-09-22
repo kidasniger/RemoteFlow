@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using RemoteFlow.Windows.Clipboard;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Security;
 using RemoteFlow.Windows.Input;
@@ -12,8 +13,11 @@ namespace RemoteFlow.Windows.Network;
 public sealed class RemoteFlowServer : IAsyncDisposable
 {
     private readonly object _gate = new();
+    private readonly object _clipboardSessionsGate = new();
     private readonly PairingManager _pairing;
     private readonly FileTransferManager _files;
+    private readonly ClipboardSyncManager _clipboard;
+    private readonly List<ClipboardSession> _clipboardSessions = new();
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptTask;
@@ -23,12 +27,15 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     public int ActiveConnections { get; private set; }
 
     public event EventHandler<string>? StatusChanged;
+    public event EventHandler<string>? ClipboardStatusChanged;
     public event EventHandler<RemoteFlowServerEvent>? MessageReceived;
 
     public RemoteFlowServer(PairingManager pairing)
     {
         _pairing = pairing;
         _files = new FileTransferManager();
+        _clipboard = new ClipboardSyncManager();
+        _clipboard.Changed += Clipboard_Changed;
     }
 
     public Task StartAsync(int port = RemoteFlowProtocol.DefaultPort)
@@ -108,6 +115,8 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         await using var session = new JsonLineSession(client);
         var sessionPaired = !_pairing.PairingEnforced;
         string? clientDeviceId = null;
+        var clipboardSession = new ClipboardSession(session, () => sessionPaired);
+        AddClipboardSession(clipboardSession);
         await using var screenStreaming = new DesktopStreamController(session, cancellationToken);
         await using var fileTransfers = _files.CreateSession();
 
@@ -159,6 +168,9 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                         paired
                             ? $"Appairage accepté : {message.ClientName ?? "Android"}"
                             : $"Appairage refusé : {client.Client.RemoteEndPoint}");
+                    ClipboardStatusChanged?.Invoke(
+                        this,
+                        paired ? "Appareil appairé • presse-papiers autorisé" : "Appairage refusé");
                     return;
                 }
 
@@ -171,6 +183,68 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                             Action: message.Action,
                             Error: "Appairage requis avant le contrôle distant",
                             Paired: false),
+                        cancellationToken);
+                    return;
+                }
+
+                if (string.Equals(message.Action, "clipboard", StringComparison.OrdinalIgnoreCase))
+                {
+                    var clipboardText = message.Text;
+                    if (clipboardText is null)
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "clipboard",
+                                Error: "Texte du presse-papiers manquant",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    if (clipboardText.Length > ClipboardSyncManager.MaxTextLength)
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "clipboard",
+                                Error: $"Presse-papiers trop volumineux (maximum {ClipboardSyncManager.MaxTextLength:N0} caractères)",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    if (!_clipboard.TrySetText(clipboardText))
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: false,
+                                Action: "clipboard",
+                                Error: "Windows n'a pas pu modifier le presse-papiers",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    var summary = $"Presse-papiers Android → Windows ({clipboardText.Length:N0} caractères)";
+                    MessageReceived?.Invoke(
+                        this,
+                        new RemoteFlowServerEvent(
+                            "clipboard",
+                            null,
+                            summary,
+                            DateTimeOffset.UtcNow));
+                    ClipboardStatusChanged?.Invoke(this, summary);
+
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: true,
+                            Action: "clipboard",
+                            Paired: sessionPaired),
                         cancellationToken);
                     return;
                 }
@@ -302,9 +376,65 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         }
         finally
         {
+            RemoveClipboardSession(clipboardSession);
             try { await screenStreaming.StopAsync(); } catch { }
             ActiveConnections = Math.Max(0, ActiveConnections - 1);
             StatusChanged?.Invoke(this, $"Client déconnecté : {client.Client.RemoteEndPoint}");
+        }
+    }
+
+    private void Clipboard_Changed(object? sender, ClipboardChangedEventArgs e)
+    {
+        var summary = $"Presse-papiers Windows modifié ({e.Text.Length:N0} caractères)";
+        ClipboardStatusChanged?.Invoke(this, summary);
+        MessageReceived?.Invoke(
+            this,
+            new RemoteFlowServerEvent(
+                "clipboard",
+                null,
+                summary,
+                DateTimeOffset.UtcNow));
+
+        _ = BroadcastClipboardAsync(e.Text);
+    }
+
+    private void AddClipboardSession(ClipboardSession session)
+    {
+        lock (_clipboardSessionsGate)
+            _clipboardSessions.Add(session);
+    }
+
+    private void RemoveClipboardSession(ClipboardSession session)
+    {
+        lock (_clipboardSessionsGate)
+            _clipboardSessions.Remove(session);
+    }
+
+    private async Task BroadcastClipboardAsync(string text)
+    {
+        ClipboardSession[] sessions;
+        lock (_clipboardSessionsGate)
+            sessions = _clipboardSessions.ToArray();
+
+        var payload = new RemoteFlowClipboardUpdate(
+            Event: "clipboard",
+            Text: text,
+            Source: "windows",
+            Timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+        foreach (var entry in sessions)
+        {
+            if (!entry.IsAuthorized())
+                continue;
+
+            try
+            {
+                await entry.Session.SendAsync(payload);
+            }
+            catch
+            {
+                RemoveClipboardSession(entry);
+            }
         }
     }
 
@@ -481,6 +611,11 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
+        _clipboard.Dispose();
         _cts?.Dispose();
     }
+
+    private sealed record ClipboardSession(
+        JsonLineSession Session,
+        Func<bool> IsAuthorized);
 }

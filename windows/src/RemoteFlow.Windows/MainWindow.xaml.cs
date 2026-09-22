@@ -13,6 +13,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _core.StateChanged += Core_StateChanged;
         _core.Server.StatusChanged += Server_StatusChanged;
+        _core.Server.ClipboardStatusChanged += Server_ClipboardStatusChanged;
         Closed += MainWindow_Closed;
 
         RefreshPairingUi();
@@ -52,6 +53,15 @@ public partial class MainWindow : Window
     private void Server_StatusChanged(object? sender, string status)
     {
         Dispatcher.Invoke(() => ConnectionStatus.Text = status);
+    }
+
+    private void Server_ClipboardStatusChanged(object? sender, string status)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            DashboardClipboardStatus.Text = status;
+            PairingClipboardStatus.Text = status;
+        });
     }
 
     private void Core_StateChanged(object? sender, ConnectionState state)
@@ -104,6 +114,11 @@ public partial class MainWindow : Window
 
     private void Macros_Click(object sender, RoutedEventArgs e) =>
         ShowPage("Macros", "Raccourcis et commandes RemoteFlow natifs côté Windows.");
+
+    private void Clipboard_Click(object sender, RoutedEventArgs e) =>
+        ShowPage(
+            "Presse-papiers universel",
+            "Synchronisation locale du texte entre Windows et les clients RemoteFlow compatibles. Aucun serveur cloud ni Internet n'est utilisé.");
 
     private void Webcam_Click(object sender, RoutedEventArgs e) =>
         ShowPage("Webcam", "Capture caméra réseau du téléphone et intégration webcam Windows.");

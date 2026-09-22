@@ -70,7 +70,7 @@ public sealed record RemoteFlowMessage
     public long? TotalBytes { get; init; }
     public int? ChunkSize { get; init; }
     public string? Data { get; init; }
-  }
+}
 
 public sealed record RemoteFlowServerEvent(
     string Action,
@@ -134,3 +134,9 @@ public sealed record RemoteFlowFileTransferState(
     long TotalBytes,
     string? FileName = null,
     string? Error = null);
+
+public sealed record RemoteFlowClipboardUpdate(
+    string Event,
+    string Text,
+    string Source,
+    long Timestamp);

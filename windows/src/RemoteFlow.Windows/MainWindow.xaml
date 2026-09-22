@@ -55,6 +55,7 @@
                     <Button Style="{StaticResource NavButton}" Click="Files_Click" Content="▤   Fichiers"/>
                     <Button Style="{StaticResource NavButton}" Click="Screens_Click" Content="▦   Multi-écrans"/>
                     <Button Style="{StaticResource NavButton}" Click="Macros_Click" Content="⌘   Macros"/>
+                    <Button Style="{StaticResource NavButton}" Click="Clipboard_Click" Content="▣   Presse-papiers"/>
                     <Button Style="{StaticResource NavButton}" Click="Webcam_Click" Content="◉   Webcam"/>
                     <Button Style="{StaticResource NavButton}" Click="Settings_Click" Content="⚙   Paramètres"/>
                 </StackPanel>
@@ -128,9 +129,9 @@
                         </Border>
                         <Border Style="{StaticResource Card}" Grid.Column="3" Margin="10,0,0,0">
                             <StackPanel>
-                                <TextBlock Text="Appareil" Foreground="#94A3B8" FontSize="11"/>
-                                <TextBlock Text="Android" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
-                                <TextBlock Text="Prêt pour appairage" Foreground="#34D399" FontSize="11"/>
+                                <TextBlock Text="Presse-papiers" Foreground="#94A3B8" FontSize="11"/>
+                                <TextBlock Text="ACTIF" FontSize="24" FontWeight="Bold" Margin="0,7,0,0"/>
+                                <TextBlock Text="Synchronisation locale" Foreground="#34D399" FontSize="11"/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -167,9 +168,9 @@
                             </Border>
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
-                                    <TextBlock Text="Actions rapides" FontSize="15" FontWeight="SemiBold"/>
-                                    <Button Content="Ouvrir les fichiers" Click="Files_Click" Margin="0,12,0,6"/>
-                                    <Button Content="Contrôle distant" Click="ConnectNow_Click"/>
+                                    <TextBlock Text="Presse-papiers universel" FontSize="15" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="DashboardClipboardStatus" Text="Surveillance active • texte uniquement" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,7,0,12"/>
+                                    <Button Content="Ouvrir le presse-papiers" Click="Clipboard_Click"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -216,6 +217,14 @@
                         </Border>
 
                         <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="Presse-papiers universel" FontSize="18" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="PairingClipboardStatus" Text="Surveillance locale active • hors Internet" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                <TextBlock Text="Texte uniquement, jusqu'à 1 000 000 caractères. Les événements restent sur le réseau local TCP RemoteFlow." Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                             <StackPanel>
                                 <TextBlock Text="Sécurité de session" FontSize="18" FontWeight="SemiBold"/>
                                 <TextBlock Text="Identité ECDSA P-256 persistante + signature du hello + stockage DPAPI." Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,8,0,0"/>
