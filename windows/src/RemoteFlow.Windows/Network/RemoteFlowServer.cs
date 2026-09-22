@@ -176,7 +176,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                     var screenType = message.Type?.Trim().ToUpperInvariant();
                     if (screenType == "START")
                     {
-                        var summary = await screenStreaming.StartAsync(
+                        var screenSummaryStart = await screenStreaming.StartAsync(
                             message.Fps ?? 8,
                             message.MaxWidth ?? 1280,
                             message.Quality ?? 60,
@@ -187,7 +187,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                             new RemoteFlowServerEvent(
                                 "screen",
                                 "START",
-                                summary,
+                                screenSummaryStart,
                                 DateTimeOffset.UtcNow));
 
                         await session.SendAsync(
@@ -202,14 +202,14 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
                     if (screenType == "STOP")
                     {
-                        var summary = await screenStreaming.StopAsync();
+                        var screenSummaryStop = await screenStreaming.StopAsync();
 
                         MessageReceived?.Invoke(
                             this,
                             new RemoteFlowServerEvent(
                                 "screen",
                                 "STOP",
-                                summary,
+                                screenSummaryStop,
                                 DateTimeOffset.UtcNow));
 
                         await session.SendAsync(
