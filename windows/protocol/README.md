@@ -146,3 +146,34 @@ Exemple :
 Windows conserve la compatibilité avec le format Android v1 actuel qui ne fournit que `pointsCount` : le tracé est accusé réception et journalisé, mais ne peut pas être redessiné sans coordonnées.
 
 Les tracés complets provenant d'un client compatible sont affichés immédiatement dans le tableau blanc Windows puis relayés aux autres clients autorisés.
+
+
+## Phase 14 — Webcam Windows native
+
+Windows intègre désormais une capture webcam locale basée sur OpenCV/OpenCvSharp :
+
+- détection des webcams disponibles ;
+- sélection de la caméra ;
+- aperçu vidéo local dans WPF ;
+- résolution 640×480, 1280×720 ou 1920×1080 ;
+- cadence configurable de 5 à 30 FPS ;
+- qualité JPEG de 50 à 90 ;
+- démarrage et arrêt natifs ;
+- diffusion des images JPEG aux clients RemoteFlow autorisés lorsque la capture est active.
+
+Commandes JSONL compatibles :
+
+```json
+{"action":"webcam","type":"START","cameraIndex":0,"frameWidth":1280,"frameHeight":720,"fps":15,"quality":70}
+{"action":"webcam","type":"STOP"}
+```
+
+Le flux utilise :
+
+```json
+{"event":"webcam_stream","state":"started","cameraIndex":0,"cameraName":"Webcam 1","width":1280,"height":720,"fps":15,"quality":70}
+```
+
+puis des événements `webcam_frame` contenant l'image JPEG en Base64.
+
+La version Android actuelle n'est pas modifiée dans cette phase ; elle devra décoder `webcam_frame` pour afficher le flux distant dans une prochaine évolution coordonnée.

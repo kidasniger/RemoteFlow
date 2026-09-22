@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private string? _editingMacroId;
     private CancellationTokenSource? _macroCts;
     private bool _applyingRemoteWhiteboardStroke;
+    private bool _webcamStopping;
 
     public MainWindow()
     {
@@ -35,13 +36,18 @@ public partial class MainWindow : Window
         _core.Server.ClipboardStatusChanged += Server_ClipboardStatusChanged;
         _core.Server.FileTransferStatusChanged += Server_FileTransferStatusChanged;
         _core.Server.WhiteboardStrokeReceived += Server_WhiteboardStrokeReceived;
+        _core.Server.WebcamFrameReceived += Server_WebcamFrameReceived;
+        _core.Server.WebcamStatusChanged += Server_WebcamStatusChanged;
         FilesList.ItemsSource = _fileItems;
         ScreensList.ItemsSource = _screenItems;
         MacrosList.ItemsSource = _macroItems;
         MacroStepsList.ItemsSource = _macroSteps;
         WhiteboardCanvas.DefaultDrawingAttributes = CreateWhiteboardDrawingAttributes("#2563EB", 6);
         WhiteboardCanvas.StrokeCollected += WhiteboardCanvas_StrokeCollected;
-        Closed += MainWindow_Closed;
+        WebcamPreviewImage.Visibility = Visibility.Collapsed;
+        WebcamPreviewPlaceholder.Visibility = Visibility.Visible;
+        _ = RefreshWebcamsAsync();
+                Closed += MainWindow_Closed;
 
         RefreshPairingUi();
         _ = StartRemoteFlowServerAsync();
@@ -110,6 +116,7 @@ public partial class MainWindow : Window
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Visible;
         PageTitle.Text = title;
         PageSubtitle.Text = "RemoteFlow Windows natif";
@@ -125,6 +132,7 @@ public partial class MainWindow : Window
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau de bord";
         PageSubtitle.Text = "Centre de contrôle RemoteFlow Windows.";
@@ -139,6 +147,7 @@ public partial class MainWindow : Window
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Connexion & appairage";
         PageSubtitle.Text = "QR, PIN et identité de sécurité RemoteFlow.";
@@ -153,6 +162,7 @@ public partial class MainWindow : Window
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Fichiers";
         PageSubtitle.Text = "Gestion native du dossier RemoteFlow et transferts avec le client connecté.";
@@ -168,6 +178,7 @@ public partial class MainWindow : Window
         ScreensView.Visibility = Visibility.Visible;
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Multi-écrans";
         PageSubtitle.Text = "Moniteurs Windows, sélection d’écran et streaming distant natif.";
@@ -281,6 +292,7 @@ public partial class MainWindow : Window
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Visible;
         WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Macros";
         PageSubtitle.Text = "Séquences d’actions natives enregistrées localement et exécutables sur Windows.";
@@ -296,6 +308,7 @@ public partial class MainWindow : Window
         ScreensView.Visibility = Visibility.Collapsed;
         MacrosView.Visibility = Visibility.Collapsed;
         WhiteboardView.Visibility = Visibility.Visible;
+        WebcamView.Visibility = Visibility.Collapsed;
         PlaceholderView.Visibility = Visibility.Collapsed;
         PageTitle.Text = "Tableau blanc";
         PageSubtitle.Text = "Dessin natif Windows et partage de tracés avec les clients RemoteFlow compatibles.";
@@ -1035,6 +1048,159 @@ public partial class MainWindow : Window
         return $"{bytes / (1024d * 1024 * 1024):0.0} Go";
     }
 
+
+    private void Webcam_Click(object sender, RoutedEventArgs e)
+    {
+        DashboardView.Visibility = Visibility.Collapsed;
+        ConnectionView.Visibility = Visibility.Collapsed;
+        FilesView.Visibility = Visibility.Collapsed;
+        ScreensView.Visibility = Visibility.Collapsed;
+        MacrosView.Visibility = Visibility.Collapsed;
+        WhiteboardView.Visibility = Visibility.Collapsed;
+        WebcamView.Visibility = Visibility.Visible;
+        PlaceholderView.Visibility = Visibility.Collapsed;
+        PageTitle.Text = "Webcam";
+        PageSubtitle.Text = "Capture vidéo native Windows et diffusion aux clients RemoteFlow autorisés.";
+        WebcamStatusText.Text = _core.Server.IsWebcamRunning
+            ? "Capture webcam active."
+            : "Sélectionnez une webcam puis démarrez la capture.";
+        _ = RefreshWebcamsAsync();
+    }
+
+    private void RefreshWebcams_Click(object sender, RoutedEventArgs e) => _ = RefreshWebcamsAsync();
+
+    private async Task RefreshWebcamsAsync()
+    {
+        try
+        {
+            var devices = await Task.Run(() => _core.Server.ListWebcams());
+            WebcamDeviceCombo.ItemsSource = devices;
+            WebcamDeviceCombo.SelectedIndex = devices.Count > 0 ? 0 : -1;
+            WebcamDetectedText.Text = devices.Count == 0
+                ? "Aucune webcam détectée sur ce PC."
+                : $"{devices.Count:N0} webcam(s) détectée(s).";
+            WebcamStatusText.Text = devices.Count == 0
+                ? "Connectez une webcam puis actualisez la liste."
+                : "Webcam prête. Choisissez la caméra et lancez la capture.";
+        }
+        catch (Exception ex)
+        {
+            WebcamDetectedText.Text = $"Détection impossible : {ex.Message}";
+            WebcamStatusText.Text = $"Impossible de lister les webcams : {ex.Message}";
+        }
+    }
+
+    private static (int Width, int Height) GetWebcamResolution(ComboBox comboBox)
+    {
+        var text = (comboBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
+        return text switch
+        {
+            "640×480" => (640, 480),
+            "1920×1080" => (1920, 1080),
+            _ => (1280, 720)
+        };
+    }
+
+    private static int GetWebcamComboInt(ComboBox comboBox, int fallback)
+    {
+        if (comboBox.SelectedItem is ComboBoxItem item &&
+            int.TryParse(item.Content?.ToString(), out var value))
+            return value;
+        return fallback;
+    }
+
+    private async void StartWebcam_Click(object sender, RoutedEventArgs e)
+    {
+        if (WebcamDeviceCombo.SelectedItem is not WebcamDeviceInfo device)
+        {
+            WebcamStatusText.Text = "Aucune webcam sélectionnée.";
+            return;
+        }
+
+        try
+        {
+            var (width, height) = GetWebcamResolution(WebcamResolutionCombo);
+            var fps = GetWebcamComboInt(WebcamFpsCombo, 15);
+            var quality = GetWebcamComboInt(WebcamQualityCombo, 70);
+
+            WebcamStatusText.Text = $"Ouverture de {device.Name}…";
+            WebcamPreviewPlaceholder.Text = "Initialisation de la caméra…";
+            var result = await _core.Server.StartWebcamAsync(
+                device.Index,
+                width,
+                height,
+                fps,
+                quality);
+
+            WebcamStatusText.Text = result.Ok
+                ? result.Summary ?? "Capture webcam démarrée."
+                : result.Error ?? "Impossible de démarrer la webcam.";
+        }
+        catch (Exception ex)
+        {
+            WebcamStatusText.Text = $"Démarrage impossible : {ex.Message}";
+        }
+    }
+
+    private async void StopWebcam_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _webcamStopping = true;
+            WebcamStatusText.Text = "Arrêt de la webcam…";
+            var result = await _core.Server.StopWebcamAsync();
+            WebcamStatusText.Text = result.Ok
+                ? result.Summary ?? "Webcam arrêtée."
+                : result.Error ?? "Impossible d'arrêter la webcam.";
+        }
+        catch (Exception ex)
+        {
+            WebcamStatusText.Text = $"Arrêt impossible : {ex.Message}";
+        }
+        finally
+        {
+            _webcamStopping = false;
+        }
+    }
+
+    private void Server_WebcamStatusChanged(object? sender, string status)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            WebcamStatusText.Text = status;
+        });
+    }
+
+    private void Server_WebcamFrameReceived(object? sender, RemoteFlowWebcamFrame frame)
+    {
+        if (_webcamStopping)
+            return;
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                using var stream = new MemoryStream(frame.JpegBytes);
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = stream;
+                bitmap.DecodePixelWidth = Math.Min(frame.Width, 1280);
+                bitmap.EndInit();
+                bitmap.Freeze();
+
+                WebcamPreviewImage.Source = bitmap;
+                WebcamPreviewImage.Visibility = Visibility.Visible;
+                WebcamPreviewPlaceholder.Visibility = Visibility.Collapsed;
+                WebcamPreviewInfo.Text = $"Webcam • {frame.Width}×{frame.Height} • {frame.Fps} FPS • JPEG Q{frame.Quality}";
+            }
+            catch (Exception ex)
+            {
+                WebcamStatusText.Text = $"Aperçu webcam impossible : {ex.Message}";
+            }
+        }));
+    }
+
     private void Clipboard_Click(object sender, RoutedEventArgs e) =>
         ShowPage(
             "Presse-papiers universel",
@@ -1078,6 +1244,7 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
+        try { await _core.Server.StopWebcamAsync(); } catch { }
         try { await _core.DisposeAsync(); } catch { }
     }
 }

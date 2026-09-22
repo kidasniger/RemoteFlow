@@ -56,8 +56,8 @@
                     <Button Style="{StaticResource NavButton}" Click="Screens_Click" Content="▦   Multi-écrans"/>
                     <Button Style="{StaticResource NavButton}" Click="Macros_Click" Content="⌘   Macros"/>
                     <Button Style="{StaticResource NavButton}" Click="Whiteboard_Click" Content="✎   Tableau blanc"/>
-                    <Button Style="{StaticResource NavButton}" Click="Clipboard_Click" Content="▣   Presse-papiers"/>
                     <Button Style="{StaticResource NavButton}" Click="Webcam_Click" Content="◉   Webcam"/>
+                    <Button Style="{StaticResource NavButton}" Click="Clipboard_Click" Content="▣   Presse-papiers"/>
                     <Button Style="{StaticResource NavButton}" Click="Settings_Click" Content="⚙   Paramètres"/>
                 </StackPanel>
 
@@ -707,6 +707,115 @@
                                    TextWrapping="Wrap"/>
                     </Border>
                 </Grid>
+                <Grid x:Name="WebcamView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="0" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="260"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Caméra Windows" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="WebcamDetectedText"
+                                           Text="Détection des webcams…"
+                                           Foreground="#94A3B8"
+                                           FontSize="11"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                <TextBlock Text="Caméra" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="WebcamDeviceCombo"
+                                          Margin="0,4,0,0"
+                                          DisplayMemberPath="Name"
+                                          SelectedIndex="0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Margin="10,0,0,0">
+                                <TextBlock Text="FPS" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="WebcamFpsCombo" Margin="0,4,0,0" SelectedIndex="2">
+                                    <ComboBoxItem Content="5"/>
+                                    <ComboBoxItem Content="10"/>
+                                    <ComboBoxItem Content="15"/>
+                                    <ComboBoxItem Content="20"/>
+                                    <ComboBoxItem Content="30"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="3" Margin="10,0,0,0">
+                                <TextBlock Text="Qualité" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="WebcamQualityCombo" Margin="0,4,0,0" SelectedIndex="2">
+                                    <ComboBoxItem Content="50"/>
+                                    <ComboBoxItem Content="60"/>
+                                    <ComboBoxItem Content="70"/>
+                                    <ComboBoxItem Content="80"/>
+                                    <ComboBoxItem Content="90"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="4" Margin="10,0,0,0">
+                                <TextBlock Text="Résolution" FontSize="10" Foreground="#64748B"/>
+                                <ComboBox x:Name="WebcamResolutionCombo" Margin="0,4,0,0" SelectedIndex="1">
+                                    <ComboBoxItem Content="640×480"/>
+                                    <ComboBoxItem Content="1280×720"/>
+                                    <ComboBoxItem Content="1920×1080"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="10,0,0,0">
+                                <Button Content="Actualiser" Click="RefreshWebcams_Click" Padding="12,8"/>
+                                <Button Content="Démarrer" Click="StartWebcam_Click" Padding="12,8" Margin="8,0,0,0"/>
+                                <Button Content="Arrêter" Click="StopWebcam_Click" Padding="12,8" Margin="8,0,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="1" Padding="8">
+                        <Grid Background="#020617">
+                            <Image x:Name="WebcamPreviewImage"
+                                   Stretch="Uniform"
+                                   SnapsToDevicePixels="True"/>
+                            <TextBlock x:Name="WebcamPreviewPlaceholder"
+                                       Text="Caméra arrêtée"
+                                       Foreground="#64748B"
+                                       FontSize="15"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                            <Border HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Background="#111827"
+                                    BorderBrush="#334155"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="8,5"
+                                    Margin="12">
+                                <TextBlock x:Name="WebcamPreviewInfo"
+                                           Text="Aperçu local"
+                                           FontSize="11"
+                                           Foreground="#CBD5E1"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Grid.Row="2" Margin="0,14,0,0" Padding="12">
+                        <TextBlock x:Name="WebcamStatusText"
+                                   Text="Sélectionnez une webcam puis démarrez la capture."
+                                   Foreground="#22D3EE"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+                </Grid>
+
                 <StackPanel x:Name="PlaceholderView" Visibility="Collapsed">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>

@@ -64,6 +64,9 @@ public sealed record RemoteFlowMessage
     public int? MaxWidth { get; init; }
     public int? Fps { get; init; }
     public int? ScreenIndex { get; init; }
+    public int? CameraIndex { get; init; }
+    public int? FrameWidth { get; init; }
+    public int? FrameHeight { get; init; }
     public string? TransferId { get; init; }
     public string? FileName { get; init; }
     public string? Path { get; init; }
@@ -163,3 +166,26 @@ public sealed record RemoteFlowWhiteboardStroke(
     float Width,
     string Source,
     long Timestamp);
+
+
+public sealed record RemoteFlowWebcamState(
+    string Event,
+    string State,
+    int CameraIndex,
+    string CameraName,
+    int Width,
+    int Height,
+    int Fps,
+    int Quality,
+    string FrameFormat = "jpeg");
+
+public sealed record RemoteFlowWebcamFrame(
+    string Event,
+    long Sequence,
+    long Timestamp,
+    int Width,
+    int Height,
+    int Fps,
+    int Quality,
+    string Format,
+    byte[] JpegBytes);

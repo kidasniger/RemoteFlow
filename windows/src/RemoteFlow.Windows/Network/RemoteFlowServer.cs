@@ -20,6 +20,8 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     private readonly FileTransferManager _files;
     private readonly ClipboardSyncManager _clipboard;
     private readonly MacroManager _macros;
+    private readonly WebcamManager _webcam;
+    private int _webcamBroadcastBusy;
     private readonly List<ClipboardSession> _clipboardSessions = new();
     private readonly List<ConnectedClient> _connectedClients = new();
     private TcpListener? _listener;
@@ -35,6 +37,8 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     public event EventHandler<RemoteFlowFileTransferState>? FileTransferStatusChanged;
     public event EventHandler<RemoteFlowWhiteboardStroke>? WhiteboardStrokeReceived;
     public event EventHandler<RemoteFlowServerEvent>? MessageReceived;
+    public event EventHandler<RemoteFlowWebcamFrame>? WebcamFrameReceived;
+    public event EventHandler<string>? WebcamStatusChanged;
 
     public RemoteFlowServer(PairingManager pairing)
     {
@@ -42,11 +46,49 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         _files = new FileTransferManager();
         _clipboard = new ClipboardSyncManager();
         _macros = new MacroManager();
+        _webcam = new WebcamManager();
+        _webcam.FrameCaptured += Webcam_FrameCaptured;
+        _webcam.StatusChanged += Webcam_StatusChanged;
         _clipboard.Changed += Clipboard_Changed;
         _files.TransferStatusChanged += Files_TransferStatusChanged;
     }
 
     public string FilesRootPath => _files.RootPath;
+    public bool IsWebcamRunning => _webcam.IsRunning;
+
+    public IReadOnlyList<WebcamDeviceInfo> ListWebcams() => WebcamManager.DetectDevices();
+
+    public async Task<(bool Ok, string? Error, string? Summary)> StartWebcamAsync(
+        int cameraIndex,
+        int width,
+        int height,
+        int fps,
+        int quality,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var summary = await _webcam.StartAsync(cameraIndex, width, height, fps, quality, cancellationToken);
+            return (true, null, summary);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || ex is IOException)
+        {
+            return (false, ex.Message, null);
+        }
+    }
+
+    public async Task<(bool Ok, string? Error, string? Summary)> StopWebcamAsync()
+    {
+        try
+        {
+            var summary = await _webcam.StopAsync();
+            return (true, null, summary);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || ex is IOException)
+        {
+            return (false, ex.Message, null);
+        }
+    }
 
     public IReadOnlyList<RemoteFlowMacro> ListMacros() => _macros.List();
 
@@ -642,6 +684,95 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                     return;
                 }
 
+                if (string.Equals(message.Action, "webcam", StringComparison.OrdinalIgnoreCase))
+                {
+                    var webcamType = message.Type?.Trim().ToUpperInvariant();
+
+                    if (webcamType == "STOP")
+                    {
+                        var stopResult = await StopWebcamAsync();
+                        await session.SendAsync(
+                            new RemoteFlowWebcamState(
+                                Event: "webcam_stream",
+                                State: stopResult.Ok ? "stopped" : "error",
+                                CameraIndex: -1,
+                                CameraName: "",
+                                Width: 0,
+                                Height: 0,
+                                Fps: 0,
+                                Quality: 0),
+                            cancellationToken);
+
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: stopResult.Ok,
+                                Action: "webcam",
+                                Error: stopResult.Error,
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    if (webcamType == "START")
+                    {
+                        var startResult = await StartWebcamAsync(
+                            message.CameraIndex ?? 0,
+                            message.FrameWidth ?? 1280,
+                            message.FrameHeight ?? 720,
+                            message.Fps ?? 15,
+                            message.Quality ?? 70,
+                            cancellationToken);
+
+                        if (!startResult.Ok)
+                        {
+                            await session.SendAsync(
+                                new RemoteFlowAck(
+                                    Event: "ack",
+                                    Ok: false,
+                                    Action: "webcam",
+                                    Error: startResult.Error,
+                                    Paired: sessionPaired),
+                                cancellationToken);
+                            return;
+                        }
+
+                        var device = WebcamManager.DetectDevices()
+                            .FirstOrDefault(x => x.Index == (message.CameraIndex ?? 0));
+
+                        await session.SendAsync(
+                            new RemoteFlowWebcamState(
+                                Event: "webcam_stream",
+                                State: "started",
+                                CameraIndex: message.CameraIndex ?? 0,
+                                CameraName: device?.Name ?? $"Webcam {(message.CameraIndex ?? 0) + 1}",
+                                Width: message.FrameWidth ?? 1280,
+                                Height: message.FrameHeight ?? 720,
+                                Fps: message.Fps ?? 15,
+                                Quality: message.Quality ?? 70),
+                            cancellationToken);
+
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "ack",
+                                Ok: true,
+                                Action: "webcam",
+                                Paired: sessionPaired),
+                            cancellationToken);
+                        return;
+                    }
+
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: false,
+                            Action: "webcam",
+                            Error: $"Commande webcam non prise en charge : {webcamType ?? "(vide)"}",
+                            Paired: sessionPaired),
+                        cancellationToken);
+                    return;
+                }
+
                 if (string.Equals(message.Action, "files", StringComparison.OrdinalIgnoreCase))
                 {
                     var fileResult = await HandleFileCommandAsync(
@@ -789,6 +920,47 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     {
         lock (_clientsGate)
             _connectedClients.Remove(client);
+    }
+
+
+    private void Webcam_StatusChanged(object? sender, string status)
+    {
+        WebcamStatusChanged?.Invoke(this, status);
+        MessageReceived?.Invoke(
+            this,
+            new RemoteFlowServerEvent(
+                "webcam",
+                _webcam.IsRunning ? "RUNNING" : "STOPPED",
+                status,
+                DateTimeOffset.UtcNow));
+    }
+
+    private void Webcam_FrameCaptured(object? sender, RemoteFlowWebcamFrame frame)
+    {
+        WebcamFrameReceived?.Invoke(this, frame);
+        _ = BroadcastWebcamFrameAsync(frame);
+    }
+
+    private async Task BroadcastWebcamFrameAsync(RemoteFlowWebcamFrame frame)
+    {
+        if (Interlocked.Exchange(ref _webcamBroadcastBusy, 1) != 0)
+            return;
+
+        try
+        {
+            ConnectedClient[] clients;
+            lock (_clientsGate)
+                clients = _connectedClients.Where(x => x.IsAuthorized()).ToArray();
+
+            foreach (var client in clients)
+            {
+                try { await client.Session.SendAsync(frame); } catch { }
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _webcamBroadcastBusy, 0);
+        }
     }
 
     private void Clipboard_Changed(object? sender, ClipboardChangedEventArgs e)
@@ -1020,6 +1192,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     {
         await StopAsync();
         _clipboard.Dispose();
+        try { await _webcam.DisposeAsync(); } catch { }
         _cts?.Dispose();
     }
 
