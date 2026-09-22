@@ -1,0 +1,56 @@
+name: RemoteFlow Windows Build
+on:
+  push:
+    branches: [windows]
+    paths: ['windows/**', '.github/workflows/windows-build.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    name: Build Windows + Installer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore windows/RemoteFlow.Windows.sln
+      - name: Build
+        run: dotnet build windows/RemoteFlow.Windows.sln -c Release --no-restore
+      - name: Publish self-contained
+        run: dotnet publish windows/src/RemoteFlow.Windows/RemoteFlow.Windows.csproj -c Release -r win-x64 --self-contained true -o windows/publish
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+      - name: Build installer
+        shell: powershell
+        run: iscc windows/installer/RemoteFlow.iss
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RemoteFlow-Windows
+          path: |
+            windows/publish/**
+            windows/installer/Output/*.exe
+      - name: Prepare release
+        shell: powershell
+        run: |
+          $tag = "v1.0.0-windows.$env:GITHUB_RUN_NUMBER"
+          "TAG=$tag" >> $env:GITHUB_ENV
+      - name: Create tag
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if (-not (git tag --list $env:TAG)) { git tag -a $env:TAG -m "RemoteFlow Windows $env:TAG"; git push origin $env:TAG }
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: RemoteFlow Windows ${{ env.TAG }}
+          generate_release_notes: true
+          files: windows/installer/Output/*.exe
