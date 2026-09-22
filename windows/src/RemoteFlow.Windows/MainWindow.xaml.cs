@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using Microsoft.Win32;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Screen;
+using RemoteFlow.Windows.Macros;
 
 namespace RemoteFlow.Windows;
 
