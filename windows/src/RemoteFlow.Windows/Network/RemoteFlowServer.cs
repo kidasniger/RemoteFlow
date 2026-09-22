@@ -2,12 +2,14 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using RemoteFlow.Windows.Core;
+using RemoteFlow.Windows.Security;
 
 namespace RemoteFlow.Windows.Network;
 
 public sealed class RemoteFlowServer : IAsyncDisposable
 {
     private readonly object _gate = new();
+    private readonly PairingManager _pairing;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptTask;
@@ -18,6 +20,11 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<RemoteFlowServerEvent>? MessageReceived;
+
+    public RemoteFlowServer(PairingManager pairing)
+    {
+        _pairing = pairing;
+    }
 
     public Task StartAsync(int port = RemoteFlowProtocol.DefaultPort)
     {
@@ -94,25 +101,70 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         StatusChanged?.Invoke(this, $"Client connecté : {client.Client.RemoteEndPoint}");
 
         await using var session = new JsonLineSession(client);
+        var sessionPaired = !_pairing.PairingEnforced;
+        string? clientDeviceId = null;
 
         try
         {
-            await session.SendAsync(new RemoteFlowHello(Port: Port), cancellationToken);
+            await SendHelloAsync(session, cancellationToken);
 
             await session.RunAsync(async line =>
             {
                 if (!RemoteFlowProtocol.TryParse(line, out var message) || message is null)
                 {
-                    await session.SendAsync(new RemoteFlowAck(
-                        Event: "ack",
-                        Ok: false,
-                        Error: "JSON invalide"), cancellationToken);
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: false,
+                            Error: "JSON invalide"),
+                        cancellationToken);
                     return;
                 }
 
+                clientDeviceId ??= message.ClientDeviceId;
+
                 if (string.Equals(message.Action, "hello", StringComparison.OrdinalIgnoreCase))
                 {
-                    await session.SendAsync(new RemoteFlowHello(Port: Port), cancellationToken);
+                    await SendHelloAsync(session, cancellationToken);
+                    return;
+                }
+
+                if (string.Equals(message.Action, "pair", StringComparison.OrdinalIgnoreCase))
+                {
+                    var paired = _pairing.TryPair(message.Pin, message.ClientDeviceId, message.ClientName);
+                    if (paired)
+                    {
+                        sessionPaired = true;
+                        clientDeviceId ??= message.ClientDeviceId;
+                    }
+
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "pairing",
+                            Ok: paired,
+                            Action: "pair",
+                            Error: paired ? null : "PIN incorrect",
+                            Paired: paired,
+                            DeviceId: _pairing.DeviceId),
+                        cancellationToken);
+                    StatusChanged?.Invoke(
+                        this,
+                        paired
+                            ? $"Appairage accepté : {message.ClientName ?? "Android"}"
+                            : $"Appairage refusé : {client.Client.RemoteEndPoint}");
+                    return;
+                }
+
+                if (_pairing.PairingEnforced && !sessionPaired)
+                {
+                    await session.SendAsync(
+                        new RemoteFlowAck(
+                            Event: "ack",
+                            Ok: false,
+                            Action: message.Action,
+                            Error: "Appairage requis avant le contrôle distant",
+                            Paired: false),
+                        cancellationToken);
                     return;
                 }
 
@@ -126,7 +178,7 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                         DateTimeOffset.UtcNow));
 
                 await session.SendAsync(
-                    new RemoteFlowAck(Event: "ack", Ok: true, Action: message.Action),
+                    new RemoteFlowAck(Event: "ack", Ok: true, Action: message.Action, Paired: sessionPaired),
                     cancellationToken);
             }, cancellationToken);
         }
@@ -144,6 +196,23 @@ public sealed class RemoteFlowServer : IAsyncDisposable
             ActiveConnections = Math.Max(0, ActiveConnections - 1);
             StatusChanged?.Invoke(this, $"Client déconnecté : {client.Client.RemoteEndPoint}");
         }
+    }
+
+    private async Task SendHelloAsync(JsonLineSession session, CancellationToken cancellationToken)
+    {
+        var security = _pairing.CreateSignedHello(Port);
+        await session.SendAsync(
+            new RemoteFlowHello(
+                Port: Port,
+                DeviceId: security.DeviceId,
+                Fingerprint: security.Fingerprint,
+                PublicKey: security.PublicKey,
+                Nonce: security.Nonce,
+                Signature: security.Signature,
+                PairingRequired: security.PairingRequired,
+                PinLength: security.PinLength,
+                Security: security.Security),
+            cancellationToken);
     }
 
     private static string BuildSummary(RemoteFlowMessage message)

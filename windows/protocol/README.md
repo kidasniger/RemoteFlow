@@ -2,59 +2,50 @@
 
 Version de protocole : `remoteflow-jsonl/1`
 
-## Transport Phase 3
+## Phase 4 — Appairage, identité et sécurité
 
-- Transport : TCP
-- Port par défaut : `8443`
+- Transport actuel : TCP
+- Port : `8443`
 - Encodage : UTF-8
 - Framing : une ligne JSON = un message
-- `TCP_NODELAY` activé côté Windows
-- Le serveur écoute sur `0.0.0.0:8443`
+- Identité Windows persistante : ECDSA P-256
+- Empreinte affichée : SHA-256 de la clé publique
+- PIN local : 6 chiffres, hashé avec PBKDF2-HMAC-SHA256 et protégé localement par Windows DPAPI
+- QR compatible avec le client Android actuel : `remoteflow://IP:8443`
+- Le serveur signe désormais son `hello` avec un nonce et sa clé d'identité.
 
-Cette phase implémente le transport et le contrat de messages. **Le chiffrement/authentification forte est réservé à la Phase 4**.
+### Hello serveur → Android
 
-## Hello serveur → Android
-
-```json
-{"event":"hello","version":1,"product":"RemoteFlow","platform":"windows","port":8443}
-```
-
-## Messages Android → Windows
-
-### Souris
-```json
-{"action":"mouse","type":"MOVE","x":0.5,"y":0.4,"dx":0.02,"dy":-0.01}
-```
-Types actuellement attendus : `MOVE`, `LEFT_CLICK`, `RIGHT_CLICK`, `DOUBLE_CLICK`, `SCROLL_UP`, `SCROLL_DOWN`.
-
-### Clavier
-```json
-{"action":"keyboard","key":"Ctrl","special":true,"modifier":true}
-```
-
-### Macro
-```json
-{"action":"macro","id":"macro-1","cmd":"open-terminal"}
-```
-
-### Tableau blanc
-```json
-{"action":"whiteboard","color":"#22D3EE","width":4.0,"pointsCount":18}
-```
-
-### Presse-papiers
-```json
-{"action":"clipboard","text":"Bonjour RemoteFlow"}
-```
-
-## ACK Windows → Android
+Exemple :
 
 ```json
-{"event":"ack","ok":true,"action":"mouse","protocol":"remoteflow-jsonl/1"}
+{"event":"hello","version":1,"product":"RemoteFlow","platform":"windows","port":8443,"protocol":"remoteflow-jsonl/1","deviceId":"...","fingerprint":"AA:BB:...","publicKey":"...","nonce":"...","signature":"...","pairingRequired":false,"pinLength":6,"security":"identity+p256"}
 ```
 
-Une trame JSON invalide reçoit `ok:false` avec un champ `error`.
+Le client Android v1 peut ignorer les nouveaux champs et continuer à ouvrir la connexion TCP.
 
-## Compatibilité
+### Appairage PIN
 
-Le serveur Windows accepte directement les trames actuellement envoyées par `RemotePcClient.kt` sans modification du projet Android. Les actions reçues sont journalisées et accusées réception ; leur exécution système sera branchée dans les phases fonctionnelles suivantes.
+Un futur client compatible peut envoyer :
+
+```json
+{"action":"pair","pin":"123456","clientDeviceId":"android-123","clientName":"Mon téléphone"}
+```
+
+Réponse :
+
+```json
+{"event":"pairing","ok":true,"action":"pair","protocol":"remoteflow-jsonl/1","paired":true,"deviceId":"..."}
+```
+
+### Verrouillage
+
+Lorsque `pairingRequired=true`, les commandes `mouse`, `keyboard`, `macro`, `whiteboard` et `clipboard` sont refusées jusqu'à un appairage PIN valide pour la session.
+
+Le verrouillage est volontairement **désactivé par défaut** dans cette phase pour conserver la compatibilité avec le client Android existant, qui ne possède pas encore l'étape `action=pair`.
+
+## Compatibilité et limite actuelle
+
+Cette phase ne prétend pas fournir un tunnel chiffré de bout en bout avec l'Android actuel : celui-ci ouvre encore un socket TCP et marque la session comme chiffrée sans négocier de TLS/clé de session. Windows prépare l'identité, le PIN, la signature de hello et le contrôle d'accès pour la prochaine évolution coordonnée du protocole.
+
+Les actions reçues restent journalisées et accusées réception ; leur exécution système sera branchée dans les phases fonctionnelles suivantes.

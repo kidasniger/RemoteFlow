@@ -8,6 +8,7 @@ public static class RemoteFlowProtocol
     public const int CurrentVersion = 1;
     public const string DefaultHost = "0.0.0.0";
     public const int DefaultPort = 8443;
+    public const string ProtocolName = "remoteflow-jsonl/1";
 
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -55,6 +56,9 @@ public sealed record RemoteFlowMessage
     public string? Text { get; init; }
     public long? Timestamp { get; init; }
     public int? Version { get; init; }
+    public string? Pin { get; init; }
+    public string? ClientDeviceId { get; init; }
+    public string? ClientName { get; init; }
 }
 
 public sealed record RemoteFlowServerEvent(
@@ -68,11 +72,22 @@ public sealed record RemoteFlowHello(
     int Version = RemoteFlowProtocol.CurrentVersion,
     string Product = "RemoteFlow",
     string Platform = "windows",
-    int Port = RemoteFlowProtocol.DefaultPort);
+    int Port = RemoteFlowProtocol.DefaultPort,
+    string Protocol = RemoteFlowProtocol.ProtocolName,
+    string? DeviceId = null,
+    string? Fingerprint = null,
+    string? PublicKey = null,
+    string? Nonce = null,
+    string? Signature = null,
+    bool PairingRequired = false,
+    int PinLength = 6,
+    string Security = "identity+p256");
 
 public sealed record RemoteFlowAck(
     string Event,
     bool Ok = true,
     string? Action = null,
     string? Error = null,
-    string Protocol = "remoteflow-jsonl/1");
+    string Protocol = RemoteFlowProtocol.ProtocolName,
+    bool? Paired = null,
+    string? DeviceId = null);

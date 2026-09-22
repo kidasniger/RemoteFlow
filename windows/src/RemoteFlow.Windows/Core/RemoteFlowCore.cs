@@ -1,4 +1,5 @@
 using RemoteFlow.Windows.Network;
+using RemoteFlow.Windows.Security;
 
 namespace RemoteFlow.Windows.Core;
 
@@ -7,12 +8,14 @@ public sealed class RemoteFlowCore : IAsyncDisposable
     public string Version { get; } = "1.0.0";
     public int PairingPort => RemoteFlowProtocol.DefaultPort;
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
+    public PairingManager Pairing { get; }
     public RemoteFlowServer Server { get; }
     public event EventHandler<ConnectionState>? StateChanged;
 
     public RemoteFlowCore()
     {
-        Server = new RemoteFlowServer();
+        Pairing = new PairingManager();
+        Server = new RemoteFlowServer(Pairing);
         Server.StatusChanged += (_, status) =>
         {
             if (status.StartsWith("Client connecté", StringComparison.Ordinal))
