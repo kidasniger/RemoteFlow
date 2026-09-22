@@ -73,7 +73,7 @@ public sealed class FileTransferManager
     }
 
     public FileTransferSession CreateSession() =>
-        new(_rootPath, state => _transferStatusChanged?.Invoke( state));
+        new(_rootPath, state => TransferStatusChanged?.Invoke(this, state));
 
     private string ResolveLocalPath(string requestedPath)
     {
@@ -383,8 +383,7 @@ public sealed class FileTransferManager
                         cts.Token);
 
                     currentOffset += read;
-                    TransferStatusChanged?.Invoke(
-                        this,
+                    _transferStatusChanged?.Invoke(
                         new RemoteFlowFileTransferState(
                             Event: "file_transfer",
                             TransferId: transferId,
