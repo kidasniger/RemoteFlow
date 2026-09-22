@@ -1555,10 +1555,12 @@ public partial class MainWindow : Window
     {
         _activityLog.Add(category, source, summary, level);
 
-        if (ActivityLogView.Visibility == Visibility.Visible)
-            Dispatcher.BeginInvoke(new Action(RefreshActivityLog));
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (ActivityLogView.Visibility == Visibility.Visible)
+                RefreshActivityLog();
+        }));
     }
-
     private void Server_MessageReceived(object? sender, RemoteFlowServerEvent evt) =>
         AddActivity(
             evt.Action switch
@@ -1576,13 +1578,11 @@ public partial class MainWindow : Window
 
     private static string CsvEscape(string value)
     {
-        var escaped = value.Replace(""", """");
-        return escaped.Contains(',') || escaped.Contains('"') || escaped.Contains('
-') || escaped.Contains('')
-            ? $""{escaped}""
+        var escaped = value.Replace("\"", "\"\"");
+        return escaped.Contains(',') || escaped.Contains('\"') || escaped.Contains('\n') || escaped.Contains('\r')
+            ? $"\"{escaped}\""
             : escaped;
     }
-
     private void Clipboard_Click(object sender, RoutedEventArgs e) =>
         ShowPage(
             "Presse-papiers universel",
