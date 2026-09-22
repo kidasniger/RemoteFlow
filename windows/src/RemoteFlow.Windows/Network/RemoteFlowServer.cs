@@ -8,6 +8,7 @@ using RemoteFlow.Windows.Input;
 using RemoteFlow.Windows.Screen;
 using RemoteFlow.Windows.Files;
 using RemoteFlow.Windows.Macros;
+using RemoteFlow.Windows.Webcam;
 
 namespace RemoteFlow.Windows.Network;
 

@@ -164,7 +164,7 @@ public sealed class WebcamManager : IAsyncDisposable
                         Fps: fps,
                         Quality: quality,
                         Format: "jpeg",
-                        JpegBytes: encoded));
+                        Data: Convert.ToBase64String(encoded)));
 
                 var delay = interval - (DateTimeOffset.UtcNow - started);
                 if (delay > TimeSpan.Zero)

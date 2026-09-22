@@ -188,4 +188,4 @@ public sealed record RemoteFlowWebcamFrame(
     int Fps,
     int Quality,
     string Format,
-    byte[] JpegBytes);
+    string Data);
