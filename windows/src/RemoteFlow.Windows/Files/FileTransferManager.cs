@@ -51,11 +51,11 @@ public sealed class FileTransferManager
     }
 
 
-    public string GetLocalFilePath(string relativePath) => ResolveSafePath(relativePath);
+    public string GetLocalFilePath(string relativePath) => ResolveLocalPath(relativePath);
 
     public void DeleteFile(string relativePath)
     {
-        var path = ResolveSafePath(relativePath);
+        var path = ResolveLocalPath(relativePath);
         if (!File.Exists(path))
             throw new FileNotFoundException("Fichier introuvable.", relativePath);
 
@@ -68,11 +68,32 @@ public sealed class FileTransferManager
             throw new FileNotFoundException("Fichier source introuvable.", sourcePath);
 
         var targetName = Path.GetFileName(sourcePath);
-        var targetPath = ResolveSafePath(targetName);
+        var targetPath = ResolveLocalPath(targetName);
         File.Copy(sourcePath, targetPath, true);
     }
 
-    public FileTransferSession CreateSession() => new(_rootPath);
+    public FileTransferSession CreateSession() =>
+        new(_rootPath, state => _transferStatusChanged?.Invoke( state));
+
+    private string ResolveLocalPath(string requestedPath)
+    {
+        var normalized = requestedPath
+            .Replace((char)92, Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar)
+            .Trim();
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new InvalidDataException("Nom de fichier vide.");
+
+        var rootFull = Path.GetFullPath(_rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var candidate = Path.GetFullPath(Path.Combine(_rootPath, normalized));
+
+        if (!candidate.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Chemin de fichier interdit.");
+
+        return candidate;
+    }
 
     public sealed class FileTransferSession : IAsyncDisposable
     {
@@ -80,10 +101,14 @@ public sealed class FileTransferManager
         private readonly Dictionary<string, UploadState> _uploads = new(StringComparer.Ordinal);
         private readonly Dictionary<string, CancellationTokenSource> _downloads = new(StringComparer.Ordinal);
         private readonly object _gate = new();
+        private readonly Action<RemoteFlowFileTransferState>? _transferStatusChanged;
 
-        internal FileTransferSession(string rootPath)
+        internal FileTransferSession(
+            string rootPath,
+            Action<RemoteFlowFileTransferState>? transferStatusChanged)
         {
             _rootPath = rootPath;
+            _transferStatusChanged = transferStatusChanged;
         }
 
         public Task<RemoteFlowFileTransferState> StartUploadAsync(
@@ -157,7 +182,7 @@ public sealed class FileTransferManager
                 Offset: offset,
                 TotalBytes: size,
                 FileName: fileName);
-            TransferStatusChanged?.Invoke(this, startedState);
+            _transferStatusChanged?.Invoke( startedState);
             return Task.FromResult(startedState);
         }
 
@@ -204,7 +229,7 @@ public sealed class FileTransferManager
                 Offset: upload.Offset,
                 TotalBytes: upload.TotalBytes,
                 FileName: upload.FileName);
-            TransferStatusChanged?.Invoke(this, progressState);
+            _transferStatusChanged?.Invoke( progressState);
             return progressState;
         }
 
@@ -236,7 +261,7 @@ public sealed class FileTransferManager
                 Offset: upload.Offset,
                 TotalBytes: upload.TotalBytes,
                 FileName: upload.FileName);
-            TransferStatusChanged?.Invoke(this, completedState);
+            _transferStatusChanged?.Invoke( completedState);
             return completedState;
         }
 
@@ -304,7 +329,7 @@ public sealed class FileTransferManager
                 Offset: offset,
                 TotalBytes: fileInfo.Length,
                 FileName: fileName);
-            TransferStatusChanged?.Invoke(this, downloadStartedState);
+            _transferStatusChanged?.Invoke( downloadStartedState);
             return downloadStartedState;
         }
 
@@ -379,7 +404,7 @@ public sealed class FileTransferManager
                         TotalBytes: totalBytes,
                         FileName: fileName);
                     await session.SendAsync(completedState, cts.Token);
-                    TransferStatusChanged?.Invoke(this, completedState);
+                    _transferStatusChanged?.Invoke( completedState);
                 }
             }
             catch (OperationCanceledException)
@@ -394,7 +419,7 @@ public sealed class FileTransferManager
                         TotalBytes: 0,
                         FileName: fileName);
                     await session.SendAsync(cancelledState, CancellationToken.None);
-                    TransferStatusChanged?.Invoke(this, cancelledState);
+                    _transferStatusChanged?.Invoke( cancelledState);
                 }
                 catch
                 {
