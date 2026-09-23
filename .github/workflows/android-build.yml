@@ -1,146 +1,110 @@
-name: Android Build & Release
-
+name: RemoteFlow Android Build
 on:
   push:
-    branches:
-      - main
-      - master
-    tags:
-      - 'v*'
+    branches: [main, master]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+      - '.github/workflows/android-build.yml'
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Tag de la release (ex: v1.0.1)'
-        required: false
-        default: ''
-
 permissions:
   contents: write
-
 jobs:
-  build-and-release:
-    name: Build APK, Create Tag & GitHub Release
+  build-android:
     runs-on: ubuntu-latest
-
+    name: Build signed Android APK
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 17
+      - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
-
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Ensure gradlew is executable
-        run: chmod +x gradlew
-
-      - name: Restore Debug Keystore
-        run: |
-          if [ -f "debug.keystore.base64" ]; then
-            echo "Restauration du debug.keystore depuis debug.keystore.base64..."
-            base64 -d debug.keystore.base64 > debug.keystore
-          else
-            echo "Génération d'un debug.keystore de secours..."
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
-
-      - name: Run Unit Tests
-        run: ./gradlew testDebugUnitTest
-
-      - name: Build Android APK
-        run: |
-          ./gradlew assembleDebug
-          # Tentative d'assemblage release si les clés sont configurées
-          ./gradlew assembleRelease || echo "Build release spécifique non requis, utilisation de l'APK installable"
-
-      - name: Determine Version & Tag
-        id: vars
-        run: |
-          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
-          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION="v1.0"
-            TAG="${VERSION}.${{ github.run_number }}"
-          fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Tag sélectionné : $TAG"
-
-      - name: Prepare APKs for Release
-        run: |
-          TAG="${{ steps.vars.outputs.tag }}"
-          mkdir -p release-apks
-          
-          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            cp app/build/outputs/apk/release/app-release.apk "release-apks/RemoteFlow-${TAG}.apk"
-          fi
-          if [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
-            cp app/build/outputs/apk/release/app-release-unsigned.apk "release-apks/RemoteFlow-${TAG}-unsigned.apk"
-          fi
-          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-            cp app/build/outputs/apk/debug/app-debug.apk "release-apks/RemoteFlow-${TAG}-installable.apk"
-          fi
-          
-          echo "Fichiers APK prêts pour la release :"
-          ls -la release-apks/
-
-      - name: Create Git Tag (if not present)
-        run: |
-          TAG="${{ steps.vars.outputs.tag }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Création et publication du tag Git $TAG..."
-            git tag -a "$TAG" -m "Release $TAG générée automatiquement par CI/CD"
-            git push origin "$TAG"
-          else
-            echo "Le tag $TAG existe déjà sur le dépôt distant."
-          fi
+      - name: Restore stable debug keystore
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
+          else
+            keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=RemoteFlow,C=US"
+          fi
+      - name: Restore release signing key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_BASE64 is required for the signed Android release."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+          test -s my-upload-key.jks
+      - name: Validate release signing configuration
+        shell: bash
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$STORE_PASSWORD" || (echo "::error::Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "::error::Missing ANDROID_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "::error::Missing ANDROID_KEY_PASSWORD" && exit 1)
+          keytool -list -keystore my-upload-key.jks -storepass "$STORE_PASSWORD" >/dev/null
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+      - name: Run unit tests
+        env:
+          VERSION_CODE: ${{ 20000 + github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+        run: ./gradlew testDebugUnitTest
+      - name: Assemble signed release
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION_CODE: ${{ 20000 + github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+        run: ./gradlew assembleRelease
+      - name: Prepare release APK
+        shell: bash
+        env:
+          VERSION_NAME: 1.0.${{ github.run_number }}
+        run: |
+          mkdir -p release-apks
+          cp app/build/outputs/apk/release/app-release.apk "release-apks/RemoteFlow-v${VERSION_NAME}-signed.apk"
+          sha256sum "release-apks/RemoteFlow-v${VERSION_NAME}-signed.apk" | tee "release-apks/SHA256SUMS.txt"
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RemoteFlow-Android-signed
+          path: release-apks/*
+      - name: Prepare release tag
+        shell: bash
+        run: |
+          TAG="v1.0.${GITHUB_RUN_NUMBER}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+      - name: Create tag
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag -a "$TAG" -m "RemoteFlow Android $TAG"
+            git push origin "$TAG"
+          fi
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: "RemoteFlow ${{ steps.vars.outputs.tag }}"
-          body: |
-            ### 🚀 RemoteFlow Android - Version ${{ steps.vars.outputs.tag }}
-
-            Nouvelle version officielle de l'application Android native **RemoteFlow**.
-
-            #### 📦 Installation directe
-            - Téléchargez le fichier APK `RemoteFlow-${{ steps.vars.outputs.tag }}-installable.apk` attaché ci-dessous.
-            - Ouvrez-le sur votre appareil Android pour installer l'application.
-
-            #### ⚡ Fonctionnalités
-            - Contrôle à distance haute précision (Air Trackpad tactile, clics, défilement)
-            - Clavier virtuel PC complet avec touches spéciales (Ctrl, Alt, Win, Del)
-            - Partage de fichiers rapide bidirectionnel
-            - Tableau blanc interactif avec dessin fluide
-            - Souris gyroscopique (Air Mouse) avec calibration
-            - Déclencheurs de macros Windows
-            - Webcam sans fil 1080p
-            - Synchronisation du presse-papiers
-            - Connexion réseau sécurisée QR Code ou IP directe
-          files: |
-            release-apks/*.apk
-          draft: false
-          prerelease: false
+          tag_name: ${{ env.TAG }}
+          name: RemoteFlow Android ${{ env.TAG }}
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: remoteflow-apks-${{ steps.vars.outputs.tag }}
-          path: release-apks/*.apk
+          files: release-apks/*
