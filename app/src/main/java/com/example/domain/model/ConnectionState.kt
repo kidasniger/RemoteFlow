@@ -5,7 +5,8 @@ sealed interface ConnectionState {
     data class Connecting(val target: String) : ConnectionState
     data class PairingRequired(
         val device: DeviceInfo,
-        val pinLength: Int = 6
+        val pinLength: Int,
+        val tlsFingerprint: String
     ) : ConnectionState
     data class Connected(val device: DeviceInfo) : ConnectionState
     data class Failed(val reason: String) : ConnectionState
