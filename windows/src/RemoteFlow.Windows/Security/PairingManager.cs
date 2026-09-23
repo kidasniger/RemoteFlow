@@ -52,20 +52,49 @@ public sealed class PairingManager
     {
         try
         {
+            var candidates = new List<(int Priority, string Address)>();
+
             foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (network.OperationalStatus != OperationalStatus.Up ||
-                    network.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
-                    network.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
+                    network.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
                     continue;
 
-                foreach (var address in network.GetIPProperties().UnicastAddresses)
+                var properties = network.GetIPProperties();
+                var hasIpv4Gateway = properties.GatewayAddresses.Any(gateway =>
+                    gateway.Address.AddressFamily == AddressFamily.InterNetwork &&
+                    !IPAddress.IsLoopback(gateway.Address) &&
+                    !IsLinkLocal(gateway.Address));
+
+                var interfacePriority = network.NetworkInterfaceType switch
                 {
-                    if (address.Address.AddressFamily == AddressFamily.InterNetwork &&
-                        !IPAddress.IsLoopback(address.Address))
-                        return address.Address.ToString();
+                    NetworkInterfaceType.Wireless80211 when hasIpv4Gateway => 0,
+                    NetworkInterfaceType.Wireless80211 => 2,
+                    NetworkInterfaceType.Ethernet when hasIpv4Gateway => 1,
+                    NetworkInterfaceType.Ethernet => 3,
+                    _ when hasIpv4Gateway => 4,
+                    _ => 5
+                };
+
+                foreach (var address in properties.UnicastAddresses)
+                {
+                    var ipv4 = address.Address;
+                    if (ipv4.AddressFamily != AddressFamily.InterNetwork ||
+                        IPAddress.IsLoopback(ipv4) ||
+                        IsLinkLocal(ipv4))
+                        continue;
+
+                    candidates.Add((interfacePriority, ipv4.ToString()));
                 }
             }
+
+            var selected = candidates
+                .OrderBy(candidate => candidate.Priority)
+                .ThenBy(candidate => candidate.Address, StringComparer.Ordinal)
+                .FirstOrDefault();
+
+            if (!string.IsNullOrWhiteSpace(selected.Address))
+                return selected.Address;
         }
         catch
         {
@@ -73,6 +102,12 @@ public sealed class PairingManager
 
         return "127.0.0.1";
     }
+
+    private static bool IsLinkLocal(IPAddress address) =>
+        address.AddressFamily == AddressFamily.InterNetwork &&
+        address.GetAddressBytes() is { Length: 4 } bytes &&
+        bytes[0] == 169 &&
+        bytes[1] == 254;
 
     public string CreateQrPayload(int port)
     {
