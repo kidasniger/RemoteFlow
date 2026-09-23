@@ -11,8 +11,9 @@ data class SharedFile(
     val name: String,
     val sizeBytes: Long,
     val formattedSize: String,
-    val isLocal: Boolean, // true if on phone, false if on PC
+    val isLocal: Boolean,
     val uri: Uri? = null,
     val status: TransferStatus = TransferStatus.IDLE,
-    val progress: Float = 0f
+    val progress: Float = 0f,
+    val relativePath: String? = null
 )
