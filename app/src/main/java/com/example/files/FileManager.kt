@@ -272,8 +272,8 @@ class FileManager(
                     client.sendFileCommand(
                         type = "DOWNLOAD_START",
                         transferId = id,
-                        fileName = remote.name,
-                        path = remote.name,
+                        fileName = remote.relativePath,
+                        path = remote.relativePath,
                         offset = 0
                     )
 
@@ -343,7 +343,8 @@ class FileManager(
                             name = remote.name,
                             sizeBytes = remote.size,
                             formattedSize = formatFileSize(remote.size),
-                            isLocal = false
+                            isLocal = false,
+                            relativePath = remote.relativePath
                         )
                     }
                 )
