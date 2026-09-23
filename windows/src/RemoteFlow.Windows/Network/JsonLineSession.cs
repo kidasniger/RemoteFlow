@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
+using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Security;
 
 namespace RemoteFlow.Windows.Network;
