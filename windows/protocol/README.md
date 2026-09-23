@@ -231,3 +231,20 @@ La version native WPF bénéficie maintenant d'une finition d'utilisation quotid
 - affichage automatique de la version RemoteFlow dans la barre d'état.
 
 Aucune modification Android n'est requise pour cette phase.
+
+## Phase 19 — Durcissement final de la sécurité Windows
+
+Le transport reste volontairement TCP/JSONL pour conserver la compatibilité avec le client Android actuel. Cette phase renforce la surface Windows sans changer le protocole de transport.
+
+Protections ajoutées :
+- lecture JSONL bornée à 4 MiB par message, avec décodage UTF-8 strict ;
+- profondeur JSON maximale de 16 niveaux ;
+- limites explicites sur les identifiants, chemins, texte, données Base64 et tracés ;
+- maximum de 8 connexions TCP simultanées ;
+- protection anti-brute-force du PIN : 5 échecs maximum sur une fenêtre de 60 secondes puis blocage temporaire d'une minute par adresse IP ;
+- compteur des connexions atomique pour éviter les incohérences sous charge concurrente ;
+- validation stricte du port TCP (1024–65535).
+
+Les commandes déjà protégées par l'appairage restent soumises au même contrôle d'accès. Les secrets du mécanisme d'identité/PIN continuent d'être protégés localement par DPAPI.
+
+La phase 19 ne prétend toujours pas fournir du TLS de bout en bout : son activation doit être faite lors d'une évolution coordonnée du protocole et du client Android afin de ne pas casser la compatibilité actuelle.

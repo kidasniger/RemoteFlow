@@ -26,13 +26,14 @@ public sealed class RemoteFlowServer : IAsyncDisposable
     private int _webcamBroadcastBusy;
     private readonly List<ClipboardSession> _clipboardSessions = new();
     private readonly List<ConnectedClient> _connectedClients = new();
+    private int _activeConnections;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptTask;
 
     public bool IsRunning { get; private set; }
     public int Port { get; private set; } = RemoteFlowProtocol.DefaultPort;
-    public int ActiveConnections { get; private set; }
+    public int ActiveConnections => Volatile.Read(ref _activeConnections);
 
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<string>? ClipboardStatusChanged;
@@ -293,6 +294,9 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     public Task StartAsync(int port = RemoteFlowProtocol.DefaultPort)
     {
+        if (port is < 1024 or > 65535)
+            throw new ArgumentOutOfRangeException(nameof(port), "Le port TCP doit être compris entre 1024 et 65535.");
+
         lock (_gate)
         {
             if (IsRunning)
@@ -362,7 +366,17 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
-        ActiveConnections++;
+        var active = Interlocked.Increment(ref _activeConnections);
+        if (active > RemoteFlowSecurityPolicy.MaxConcurrentConnections)
+        {
+            Interlocked.Decrement(ref _activeConnections);
+            StatusChanged?.Invoke(
+                this,
+                $"Connexion refusée : limite de {RemoteFlowSecurityPolicy.MaxConcurrentConnections} connexions simultanées atteinte.");
+            try { client.Dispose(); } catch { }
+            return;
+        }
+
         StatusChanged?.Invoke(this, $"Client connecté : {client.Client.RemoteEndPoint}");
 
         await using var session = new JsonLineSession(client);
@@ -406,7 +420,26 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
                 if (string.Equals(message.Action, "pair", StringComparison.OrdinalIgnoreCase))
                 {
+                    var remotePairingKey = GetRemotePairingKey(client);
+                    if (!_pairing.TryBeginPairingAttempt(remotePairingKey))
+                    {
+                        await session.SendAsync(
+                            new RemoteFlowAck(
+                                Event: "pairing",
+                                Ok: false,
+                                Action: "pair",
+                                Error: "Trop de tentatives d'appairage. Réessayez dans une minute.",
+                                Paired: false,
+                                DeviceId: _pairing.DeviceId),
+                            cancellationToken);
+                        StatusChanged?.Invoke(
+                            this,
+                            $"Appairage temporairement bloqué : {remotePairingKey}");
+                        return;
+                    }
+
                     var paired = _pairing.TryPair(message.Pin, message.ClientDeviceId, message.ClientName);
+                    _pairing.RecordPairingAttempt(remotePairingKey, paired);
                     if (paired)
                     {
                         sessionPaired = true;
@@ -919,6 +952,12 @@ public sealed class RemoteFlowServer : IAsyncDisposable
         catch (OperationCanceledException)
         {
         }
+        catch (InvalidDataException)
+        {
+            StatusChanged?.Invoke(
+                this,
+                $"Client déconnecté : protocole invalide ou message trop volumineux ({client.Client.RemoteEndPoint}).");
+        }
         catch (IOException)
         {
         }
@@ -930,11 +969,16 @@ public sealed class RemoteFlowServer : IAsyncDisposable
             RemoveClipboardSession(clipboardSession);
             RemoveConnectedClient(connectedClient);
             try { await screenStreaming.StopAsync(); } catch { }
-            ActiveConnections = Math.Max(0, ActiveConnections - 1);
+            Interlocked.Decrement(ref _activeConnections);
             StatusChanged?.Invoke(this, $"Client déconnecté : {client.Client.RemoteEndPoint}");
         }
     }
 
+
+    private static string GetRemotePairingKey(TcpClient client) =>
+        (client.Client.RemoteEndPoint as IPEndPoint)?.Address.ToString()
+        ?? client.Client.RemoteEndPoint?.ToString()
+        ?? "unknown";
 
     private void AddConnectedClient(ConnectedClient client)
     {

@@ -21,6 +21,7 @@ public sealed class PairingManager
     private readonly object _gate = new();
     private PairingStore _store;
     private ECDsa _identityKey;
+    private readonly Dictionary<string, PairingAttemptState> _pairingAttempts = new(StringComparer.OrdinalIgnoreCase);
 
     public PairingManager()
     {
@@ -121,14 +122,33 @@ public sealed class PairingManager
         if (normalized.Length != PinLength)
             return false;
 
+        string saltBase64;
+        string hashBase64;
+        lock (_gate)
+        {
+            saltBase64 = _store.PinSaltBase64;
+            hashBase64 = _store.PinHashBase64;
+        }
+
+        byte[] salt;
+        byte[] expected;
+        try
+        {
+            salt = Convert.FromBase64String(saltBase64);
+            expected = Convert.FromBase64String(hashBase64);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
         var candidate = Rfc2898DeriveBytes.Pbkdf2(
             Encoding.UTF8.GetBytes(normalized),
-            Convert.FromBase64String(_store.PinSaltBase64),
+            salt,
             PinIterations,
             HashAlgorithmName.SHA256,
             32);
 
-        var expected = Convert.FromBase64String(_store.PinHashBase64);
         return CryptographicOperations.FixedTimeEquals(candidate, expected);
     }
 
@@ -139,6 +159,58 @@ public sealed class PairingManager
             var pin = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
             StorePin(pin);
             Save();
+        }
+    }
+
+    public bool TryBeginPairingAttempt(string? remoteKey)
+    {
+        if (string.IsNullOrWhiteSpace(remoteKey))
+            return true;
+
+        var now = DateTimeOffset.UtcNow;
+        lock (_gate)
+        {
+            CleanupPairingAttempts(now);
+
+            if (!_pairingAttempts.TryGetValue(remoteKey, out var state))
+                return true;
+
+            return state.BlockedUntilUtc is null || state.BlockedUntilUtc <= now;
+        }
+    }
+
+    public void RecordPairingAttempt(string? remoteKey, bool success)
+    {
+        if (string.IsNullOrWhiteSpace(remoteKey))
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+        lock (_gate)
+        {
+            CleanupPairingAttempts(now);
+
+            if (success)
+            {
+                _pairingAttempts.Remove(remoteKey);
+                return;
+            }
+
+            if (!_pairingAttempts.TryGetValue(remoteKey, out var state) ||
+                now - state.WindowStartedAtUtc >= TimeSpan.FromSeconds(RemoteFlowSecurityPolicy.PairingFailureWindowSeconds))
+            {
+                state = new PairingAttemptState(now, 0, null);
+            }
+
+            var failures = state.FailureCount + 1;
+            var blockedUntil = failures >= RemoteFlowSecurityPolicy.MaxPairingFailures
+                ? now.AddSeconds(RemoteFlowSecurityPolicy.PairingBlockSeconds)
+                : state.BlockedUntilUtc;
+
+            _pairingAttempts[remoteKey] = state with
+            {
+                FailureCount = failures,
+                BlockedUntilUtc = blockedUntil
+            };
         }
     }
 
@@ -271,6 +343,22 @@ public sealed class PairingManager
 
         return CreateNewStore();
     }
+
+    private void CleanupPairingAttempts(DateTimeOffset now)
+    {
+        foreach (var entry in _pairingAttempts.ToArray())
+        {
+            var expiredWindow = now - entry.Value.WindowStartedAtUtc >= TimeSpan.FromSeconds(RemoteFlowSecurityPolicy.PairingFailureWindowSeconds);
+            var expiredBlock = entry.Value.BlockedUntilUtc is null || entry.Value.BlockedUntilUtc <= now;
+            if (expiredWindow && expiredBlock)
+                _pairingAttempts.Remove(entry.Key);
+        }
+    }
+
+    private sealed record PairingAttemptState(
+        DateTimeOffset WindowStartedAtUtc,
+        int FailureCount,
+        DateTimeOffset? BlockedUntilUtc);
 
     private static PairingStore CreateNewStore() => new();
 

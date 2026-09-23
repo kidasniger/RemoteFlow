@@ -13,7 +13,8 @@ public static class RemoteFlowProtocol
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        MaxDepth = RemoteFlowSecurityPolicy.MaxJsonDepth
     };
 
     public static bool TryParse(string line, out RemoteFlowMessage? message)
@@ -25,7 +26,7 @@ public static class RemoteFlowProtocol
         try
         {
             message = JsonSerializer.Deserialize<RemoteFlowMessage>(line, JsonOptions);
-            return message is not null;
+            return message is not null && IsMessageWithinLimits(message);
         }
         catch (JsonException)
         {
@@ -35,6 +36,26 @@ public static class RemoteFlowProtocol
 
     public static string Serialize(object message) =>
         JsonSerializer.Serialize(message, JsonOptions);
+
+    private static bool IsMessageWithinLimits(RemoteFlowMessage message) =>
+        IsLengthWithin(message.Action, RemoteFlowSecurityPolicy.MaxActionLength) &&
+        IsLengthWithin(message.Type, RemoteFlowSecurityPolicy.MaxTypeLength) &&
+        IsLengthWithin(message.Key, RemoteFlowSecurityPolicy.MaxKeyLength) &&
+        IsLengthWithin(message.Id, RemoteFlowSecurityPolicy.MaxIdentifierLength) &&
+        IsLengthWithin(message.Cmd, RemoteFlowSecurityPolicy.MaxIdentifierLength) &&
+        IsLengthWithin(message.Color, RemoteFlowSecurityPolicy.MaxColorLength) &&
+        IsLengthWithin(message.Pin, RemoteFlowSecurityPolicy.MaxPinLength) &&
+        IsLengthWithin(message.ClientDeviceId, RemoteFlowSecurityPolicy.MaxClientDeviceIdLength) &&
+        IsLengthWithin(message.ClientName, RemoteFlowSecurityPolicy.MaxClientNameLength) &&
+        IsLengthWithin(message.FileName, RemoteFlowSecurityPolicy.MaxFileNameLength) &&
+        IsLengthWithin(message.Path, RemoteFlowSecurityPolicy.MaxPathLength) &&
+        IsLengthWithin(message.TransferId, RemoteFlowSecurityPolicy.MaxIdentifierLength) &&
+        IsLengthWithin(message.Text, RemoteFlowSecurityPolicy.MaxTextLength) &&
+        IsLengthWithin(message.Data, RemoteFlowSecurityPolicy.MaxDataCharacters) &&
+        (message.Points is null || message.Points.Count <= RemoteFlowSecurityPolicy.MaxWhiteboardPoints);
+
+    private static bool IsLengthWithin(string? value, int maximum) =>
+        value is null || value.Length <= maximum;
 }
 
 public sealed record RemoteFlowMessage
