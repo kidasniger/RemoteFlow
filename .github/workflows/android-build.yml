@@ -1,15 +1,17 @@
 name: RemoteFlow Android Build
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
     paths:
-      - 'app/**'
-      - 'gradle/**'
-      - 'gradle.properties'
-      - 'settings.gradle.kts'
-      - 'build.gradle.kts'
-      - '.github/workflows/android-build.yml'
-  workflow_dispatch:
+      - app/**
+      - gradle/**
+      - gradle.properties
+      - settings.gradle.kts
+      - build.gradle.kts
+      - .github/workflows/android-build.yml
+  workflow_dispatch: {}
 permissions:
   contents: write
 jobs:
@@ -19,79 +21,106 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Compute app version
+        shell: bash
+        run: |
+          echo "VERSION_CODE=$((20000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
       - name: Restore stable debug keystore
         shell: bash
         env:
-          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+          DEBUG_KEYSTORE_BASE64: \${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
-            echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
           else
-            keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=RemoteFlow,C=US"
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Android Debug,O=RemoteFlow,C=US"
           fi
+
       - name: Restore release signing key
         shell: bash
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_B64: \${{ secrets.ANDROID_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 || secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "::error::Secret ANDROID_KEYSTORE_BASE64 is required for the signed Android release."
+          if [ -z "$RELEASE_KEYSTORE_B64" ]; then
+            echo "::error::Missing Android release keystore secret."
             exit 1
           fi
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > my-upload-key.jks
           test -s my-upload-key.jks
+
       - name: Validate release signing configuration
         shell: bash
         env:
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: \${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.STORE_PASSWORD }}
+          KEY_ALIAS: \${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS }}
+          KEY_PASSWORD: \${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD }}
         run: |
-          test -n "$STORE_PASSWORD" || (echo "::error::Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
-          test -n "$KEY_ALIAS" || (echo "::error::Missing ANDROID_KEY_ALIAS" && exit 1)
-          test -n "$KEY_PASSWORD" || (echo "::error::Missing ANDROID_KEY_PASSWORD" && exit 1)
+          test -n "$STORE_PASSWORD" || (echo "::error::Missing Android keystore password" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "::error::Missing Android key alias" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "::error::Missing Android key password" && exit 1)
           keytool -list -keystore my-upload-key.jks -storepass "$STORE_PASSWORD" >/dev/null
+
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
+
       - name: Run unit tests
         env:
-          VERSION_CODE: ${{ 20000 + github.run_number }}
-          VERSION_NAME: 1.0.${{ github.run_number }}
+          VERSION_CODE: \${{ env.VERSION_CODE }}
+          VERSION_NAME: \${{ env.VERSION_NAME }}
         run: ./gradlew testDebugUnitTest
+
       - name: Assemble signed release
         env:
-          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          VERSION_CODE: ${{ 20000 + github.run_number }}
-          VERSION_NAME: 1.0.${{ github.run_number }}
+          KEYSTORE_PATH: \${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: \${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.STORE_PASSWORD }}
+          KEY_ALIAS: \${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS }}
+          KEY_PASSWORD: \${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD }}
+          VERSION_CODE: \${{ env.VERSION_CODE }}
+          VERSION_NAME: \${{ env.VERSION_NAME }}
         run: ./gradlew assembleRelease
+
+      - name: Verify release artifact
+        run: |
+          test -s app/build/outputs/apk/release/app-release.apk
+          apksigner verify --verbose app/build/outputs/apk/release/app-release.apk
+
       - name: Prepare release APK
         shell: bash
-        env:
-          VERSION_NAME: 1.0.${{ github.run_number }}
         run: |
           mkdir -p release-apks
-          cp app/build/outputs/apk/release/app-release.apk "release-apks/RemoteFlow-v${VERSION_NAME}-signed.apk"
-          sha256sum "release-apks/RemoteFlow-v${VERSION_NAME}-signed.apk" | tee "release-apks/SHA256SUMS.txt"
+          cp app/build/outputs/apk/release/app-release.apk "release-apks/RemoteFlow-v$VERSION_NAME-signed.apk"
+          sha256sum "release-apks/RemoteFlow-v$VERSION_NAME-signed.apk" | tee "release-apks/SHA256SUMS.txt"
+
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: RemoteFlow-Android-signed
           path: release-apks/*
+
       - name: Prepare release tag
         shell: bash
-        run: |
-          TAG="v1.0.${GITHUB_RUN_NUMBER}"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
+        run: echo "TAG=v1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
       - name: Create tag
         shell: bash
         run: |
@@ -101,10 +130,11 @@ jobs:
             git tag -a "$TAG" -m "RemoteFlow Android $TAG"
             git push origin "$TAG"
           fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.TAG }}
-          name: RemoteFlow Android ${{ env.TAG }}
+          tag_name: \${{ env.TAG }}
+          name: RemoteFlow Android \${{ env.TAG }}
           generate_release_notes: true
           files: release-apks/*
