@@ -25,7 +25,7 @@ Name: "{autodesktop}\\RemoteFlow"; Filename: "{app}\\{#MyAppExeName}"; WorkingDi
 Name: "{group}\\RemoteFlow"; Filename: "{app}\\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{group}\\Désinstaller RemoteFlow"; Filename: "{uninstallexe}"
 [Run]
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=\"RemoteFlow\" dir=in action=allow enable=yes program=\"{app}\\{#MyAppExeName}\" protocol=TCP localport=8443 remoteip=localsubnet profile=any"; Flags: runhidden waituntilterminated
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""RemoteFlow"" dir=in action=allow enable=yes program=""{app}\\{#MyAppExeName}"" protocol=TCP localport=8443 remoteip=localsubnet profile=any"; Flags: runhidden waituntilterminated
 Filename: "{app}\\{#MyAppExeName}"; Description: "Lancer RemoteFlow"; Flags: nowait postinstall skipifsilent
 [UninstallRun]
-Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=\"RemoteFlow\""; Flags: runhidden waituntilterminated
+Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""RemoteFlow"""; Flags: runhidden waituntilterminated
