@@ -21,4 +21,5 @@ public static class RemoteFlowSecurityPolicy
     public const int MaxTextLength = 1_000_000;
     public const int MaxDataCharacters = 256_000;
     public const int MaxWhiteboardPoints = 5_000;
+    public const long MaxFileSizeBytes = 4L * 1024 * 1024 * 1024;
 }

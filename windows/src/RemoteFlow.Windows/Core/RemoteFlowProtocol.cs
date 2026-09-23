@@ -42,6 +42,7 @@ public static class RemoteFlowProtocol
         IsLengthWithin(message.Action, RemoteFlowSecurityPolicy.MaxActionLength) &&
         IsLengthWithin(message.Type, RemoteFlowSecurityPolicy.MaxTypeLength) &&
         IsLengthWithin(message.Key, RemoteFlowSecurityPolicy.MaxKeyLength) &&
+        IsLengthWithin(message.Chord, RemoteFlowSecurityPolicy.MaxKeyLength) &&
         IsLengthWithin(message.Id, RemoteFlowSecurityPolicy.MaxIdentifierLength) &&
         IsLengthWithin(message.Cmd, RemoteFlowSecurityPolicy.MaxIdentifierLength) &&
         IsLengthWithin(message.Color, RemoteFlowSecurityPolicy.MaxColorLength) &&
@@ -64,6 +65,7 @@ public sealed record RemoteFlowMessage
     public string? Action { get; init; }
     public string? Type { get; init; }
     public string? Key { get; init; }
+    public string? Chord { get; init; }
     public bool? Special { get; init; }
     public bool? Modifier { get; init; }
     public float? X { get; init; }
@@ -119,7 +121,8 @@ public sealed record RemoteFlowHello(
     string? Signature = null,
     bool PairingRequired = false,
     int PinLength = 6,
-    string Security = "identity+p256");
+    string Security = "tls1.2+/p256+pin",
+    string? TlsFingerprint = null);
 
 public sealed record RemoteFlowAck(
     string Event,

@@ -19,10 +19,15 @@ public sealed class JsonLineSession : IAsyncDisposable
     private int _readEnd;
 
     public JsonLineSession(TcpClient client)
+        : this(client, client.GetStream())
+    {
+    }
+
+    public JsonLineSession(TcpClient client, Stream stream)
     {
         _client = client;
         _client.NoDelay = true;
-        _stream = client.GetStream();
+        _stream = stream;
         _writer = new StreamWriter(_stream, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true)
         {
             AutoFlush = true,

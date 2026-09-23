@@ -21,6 +21,7 @@ public sealed class PairingManager
     private readonly object _gate = new();
     private PairingStore _store;
     private ECDsa _identityKey;
+    private readonly RemoteFlowCertificateManager _certificateManager;
     private readonly Dictionary<string, PairingAttemptState> _pairingAttempts = new(StringComparer.OrdinalIgnoreCase);
 
     public PairingManager()
@@ -33,6 +34,7 @@ public sealed class PairingManager
 
         _store = LoadStore();
         _identityKey = LoadOrCreateIdentityKey();
+        _certificateManager = new RemoteFlowCertificateManager(DeviceId);
         EnsurePin();
         Save();
     }
@@ -40,6 +42,8 @@ public sealed class PairingManager
     public string DeviceId => _store.DeviceId;
     public string Fingerprint => FormatFingerprint(Convert.FromBase64String(_store.PublicKeyBase64));
     public string PublicKeyBase64 => _store.PublicKeyBase64;
+    public System.Security.Cryptography.X509Certificates.X509Certificate2 TlsCertificate => _certificateManager.Certificate;
+    public string TlsFingerprint => _certificateManager.Fingerprint;
     public string CurrentPin => UnprotectString(_store.ProtectedPinBase64);
     public bool PairingEnforced => _store.PairingEnforced;
     public int PairedDeviceCount => _store.PairedDevices.Count;
@@ -72,7 +76,7 @@ public sealed class PairingManager
 
     public string CreateQrPayload(int port)
     {
-        return $"remoteflow://{GetLocalIpv4Address()}:{port}";
+        return $"remoteflow://{GetLocalIpv4Address()}:{port}?device={Uri.EscapeDataString(DeviceId)}&tlsfp={TlsFingerprint}";
     }
 
     public BitmapImage CreateQrImage(int port)
@@ -110,7 +114,7 @@ public sealed class PairingManager
             Convert.ToBase64String(signature),
             PairingEnforced,
             PinLength,
-            "identity+p256");
+            "tls1.2+/p256+pin");
     }
 
     public bool VerifyPin(string? pin)
@@ -405,7 +409,8 @@ public sealed record RemoteFlowSecurityHello(
     string Signature,
     bool PairingRequired,
     int PinLength,
-    string Security);
+    string Security,
+    string TlsFingerprint);
 
 public sealed record PairedDevice(
     string DeviceId,
@@ -420,6 +425,6 @@ public sealed class PairingStore
     public string PinSaltBase64 { get; set; } = string.Empty;
     public string PinHashBase64 { get; set; } = string.Empty;
     public string ProtectedPinBase64 { get; set; } = string.Empty;
-    public bool PairingEnforced { get; set; }
+    public bool PairingEnforced { get; set; } = true;
     public List<PairedDevice> PairedDevices { get; set; } = new();
 }
