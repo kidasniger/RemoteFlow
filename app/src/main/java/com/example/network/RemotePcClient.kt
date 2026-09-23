@@ -10,9 +10,11 @@ import com.example.domain.model.DeviceInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -217,6 +219,7 @@ class DefaultRemotePcClient(
     private var writer: BufferedWriter? = null
     private var reader: BufferedReader? = null
     private var readJob: Job? = null
+    private var heartbeatJob: Job? = null
     private var lastTarget: ConnectionTarget? = null
 
     private var incomingClipboardReceiver: ((String) -> Unit)? = null
@@ -353,6 +356,7 @@ class DefaultRemotePcClient(
                         .put("clientName", clientName)
                         .toString()
                 )
+                startHeartbeat()
             } catch (e: Exception) {
                 closeExistingSocket()
                 withContext(Dispatchers.Main) {
@@ -889,6 +893,28 @@ class DefaultRemotePcClient(
         }
     }
 
+    private fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(20_000L)
+                try {
+                    if (socket != null) {
+                        sendRawPayloadSuspend(
+                            JSONObject()
+                                .put("action", "hello")
+                                .put("clientDeviceId", clientDeviceId)
+                                .put("clientName", clientName)
+                                .toString()
+                        )
+                    }
+                } catch (_: Exception) {
+                    break
+                }
+            }
+        }
+    }
+
     private fun throwSecurityFailure(message: String) {
         _connectionState.value = ConnectionState.Failed(message)
         _lastActionLog.value = "Sécurité : " + message
@@ -898,6 +924,8 @@ class DefaultRemotePcClient(
     }
 
     private fun closeExistingSocket() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
         readJob?.cancel()
         readJob = null
         try { writer?.close() } catch (_: Exception) {}
