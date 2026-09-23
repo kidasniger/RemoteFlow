@@ -1,8 +1,8 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -43,11 +44,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -62,7 +63,8 @@ import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.PrimaryBlue
 import com.example.ui.theme.SecondaryCyan
 import com.example.ui.theme.StatusConnected
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -71,19 +73,39 @@ fun RemoteDesktopScreen(
     onBackClick: () -> Unit,
     onOpenKeyboard: () -> Unit
 ) {
-    val connectionState by remoteClient.connectionState.collectAsState()
-    val isConnected = connectionState is ConnectionState.Connected
-    val device = (connectionState as? ConnectionState.Connected)?.device
+    val state by remoteClient.connectionState.collectAsState()
+    val isConnected = state is ConnectionState.Connected
+    val screenFrame by remoteClient.screenFrame.collectAsState()
 
     var isFullscreen by remember { mutableStateOf(false) }
     var cursorX by remember { mutableFloatStateOf(300f) }
-    var cursorY by remember { mutableFloatStateOf(400f) }
-    var clickFeedbackText by remember { mutableStateOf("") }
+    var cursorY by remember { mutableFloatStateOf(300f) }
+    var feedback by remember { mutableStateOf("") }
+    var screenBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(clickFeedbackText) {
-        if (clickFeedbackText.isNotEmpty()) {
-            delay(800)
-            clickFeedbackText = ""
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            remoteClient.startScreenStream(8, 1280, 60, -1)
+        } else {
+            remoteClient.stopScreenStream()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { remoteClient.stopScreenStream() }
+    }
+
+    LaunchedEffect(screenFrame?.sequence) {
+        val frame = screenFrame ?: return@LaunchedEffect
+        if (!frame.format.equals("jpeg", true)) return@LaunchedEffect
+
+        screenBitmap = withContext(Dispatchers.Default) {
+            try {
+                val bytes = Base64.decode(frame.dataBase64, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
@@ -91,9 +113,7 @@ fun RemoteDesktopScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkSlate)
-            .testTag("remote_desktop_screen")
     ) {
-        // Top Toolbar
         if (!isFullscreen) {
             Row(
                 modifier = Modifier
@@ -115,8 +135,7 @@ fun RemoteDesktopScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Retour",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            tint = Color.White
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
@@ -128,42 +147,33 @@ fun RemoteDesktopScreen(
                     )
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(if (isConnected) StatusConnected else Color.Gray)
-                    )
-                    Text(
-                        text = if (isConnected && device != null) "${device.latencyMs} ms • ${device.ipAddress}" else "Non connecté",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                Text(
+                    text = if (isConnected) {
+                        "TLS • " + (state as ConnectionState.Connected).device.latencyMs + " ms"
+                    } else {
+                        "Non connecté"
+                    },
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 11.sp
+                )
             }
         }
 
-        // Remote Trackpad & Display Area
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .background(CardDark)
                 .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
+                    detectDragGestures { change, amount ->
                         change.consume()
-                        cursorX = (cursorX + dragAmount.x).coerceIn(20f, 1000f)
-                        cursorY = (cursorY + dragAmount.y).coerceIn(20f, 1600f)
+                        cursorX += amount.x
+                        cursorY += amount.y
                         remoteClient.sendMouseEvent(
                             RemoteMouseEvent(
-                                type = MouseAction.MOVE,
-                                deltaX = dragAmount.x,
-                                deltaY = dragAmount.y
+                                type = MouseAction.MOVE_RELATIVE,
+                                deltaX = amount.x,
+                                deltaY = amount.y
                             )
                         )
                     }
@@ -171,80 +181,74 @@ fun RemoteDesktopScreen(
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {
-                            clickFeedbackText = "Clic Gauche"
+                            feedback = "Clic Gauche"
                             remoteClient.sendMouseEvent(
-                                RemoteMouseEvent(type = MouseAction.LEFT_CLICK, x = cursorX, y = cursorY)
+                                RemoteMouseEvent(MouseAction.LEFT_CLICK)
                             )
                         },
                         onDoubleTap = {
-                            clickFeedbackText = "Double Clic"
+                            feedback = "Double Clic"
                             remoteClient.sendMouseEvent(
-                                RemoteMouseEvent(type = MouseAction.DOUBLE_CLICK, x = cursorX, y = cursorY)
+                                RemoteMouseEvent(MouseAction.DOUBLE_CLICK)
                             )
                         },
                         onLongPress = {
-                            clickFeedbackText = "Clic Droit"
+                            feedback = "Clic Droit"
                             remoteClient.sendMouseEvent(
-                                RemoteMouseEvent(type = MouseAction.RIGHT_CLICK, x = cursorX, y = cursorY)
+                                RemoteMouseEvent(MouseAction.RIGHT_CLICK)
                             )
                         }
                     )
                 }
         ) {
-            if (!isConnected) {
-                // Disconnected guidance
-                Column(
+            if (screenBitmap != null) {
+                Image(
+                    bitmap = screenBitmap!!,
+                    contentDescription = "Écran Windows",
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(24.dp),
+                        .fillMaxSize()
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Fit
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(DarkNavy.copy(alpha = 0.72f))
+                        .padding(horizontal = 9.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "ÉCRAN PC • " +
+                            (screenFrame?.width ?: 0) + "×" +
+                            (screenFrame?.height ?: 0),
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
                         imageVector = Icons.Default.Mouse,
-                        contentDescription = "Trackpad",
-                        tint = Color.White.copy(alpha = 0.3f),
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.32f),
                         modifier = Modifier.size(48.dp)
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Pavé Tactile PC Haute Précision",
+                        text = if (isConnected) "Réception du bureau Windows…" else "Connectez d'abord le PC",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Glissez pour diriger le curseur, touchez pour cliquer.\nAssociez votre PC via l'écran Connexion.",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            } else {
-                // Connected Trackpad grid guide
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Surface Tactile Active",
-                        color = SecondaryCyan.copy(alpha = 0.5f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "1 doigt = Clic Gauche • 2 doigts = Défilement • Long appui = Clic Droit",
-                        color = Color.White.copy(alpha = 0.4f),
-                        fontSize = 10.sp
-                    )
                 }
             }
 
-            // Real Virtual Cursor on Screen
             Box(
                 modifier = Modifier
                     .offset { IntOffset(cursorX.roundToInt(), cursorY.roundToInt()) }
@@ -259,8 +263,7 @@ fun RemoteDesktopScreen(
                 )
             }
 
-            // Click Feedback Toast
-            if (clickFeedbackText.isNotEmpty()) {
+            if (feedback.isNotEmpty()) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -270,7 +273,7 @@ fun RemoteDesktopScreen(
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = clickFeedbackText,
+                        text = feedback,
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -278,7 +281,6 @@ fun RemoteDesktopScreen(
                 }
             }
 
-            // Dual Physical Click Buttons at the bottom of the trackpad
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -287,7 +289,6 @@ fun RemoteDesktopScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Left Click Button
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -296,18 +297,14 @@ fun RemoteDesktopScreen(
                         .background(Color.White.copy(alpha = 0.08f))
                         .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                         .clickable {
-                            clickFeedbackText = "Clic Gauche"
-                            remoteClient.sendMouseEvent(
-                                RemoteMouseEvent(type = MouseAction.LEFT_CLICK, x = cursorX, y = cursorY)
-                            )
-                        }
-                        .testTag("left_click_button"),
+                            feedback = "Clic Gauche"
+                            remoteClient.sendMouseEvent(RemoteMouseEvent(MouseAction.LEFT_CLICK))
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("CLIC GAUCHE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
 
-                // Right Click Button
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -316,12 +313,9 @@ fun RemoteDesktopScreen(
                         .background(Color.White.copy(alpha = 0.08f))
                         .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                         .clickable {
-                            clickFeedbackText = "Clic Droit"
-                            remoteClient.sendMouseEvent(
-                                RemoteMouseEvent(type = MouseAction.RIGHT_CLICK, x = cursorX, y = cursorY)
-                            )
-                        }
-                        .testTag("right_click_button"),
+                            feedback = "Clic Droit"
+                            remoteClient.sendMouseEvent(RemoteMouseEvent(MouseAction.RIGHT_CLICK))
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text("CLIC DROIT", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -329,7 +323,6 @@ fun RemoteDesktopScreen(
             }
         }
 
-        // Bottom Dock
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -344,30 +337,23 @@ fun RemoteDesktopScreen(
                 icon = Icons.Default.Mouse,
                 isSelected = true,
                 onClick = {
-                    clickFeedbackText = "Clic"
-                    remoteClient.sendMouseEvent(
-                        RemoteMouseEvent(type = MouseAction.LEFT_CLICK, x = cursorX, y = cursorY)
-                    )
+                    feedback = "Clic"
+                    remoteClient.sendMouseEvent(RemoteMouseEvent(MouseAction.LEFT_CLICK))
                 }
             )
-
             DockActionButton(
                 label = "Clavier",
                 icon = Icons.Default.Keyboard,
                 onClick = onOpenKeyboard
             )
-
             DockActionButton(
                 label = "Scroll Haut",
                 icon = Icons.Default.SwapVert,
                 onClick = {
-                    clickFeedbackText = "Scroll ↑"
-                    remoteClient.sendMouseEvent(
-                        RemoteMouseEvent(type = MouseAction.SCROLL_UP)
-                    )
+                    feedback = "Scroll ↑"
+                    remoteClient.sendMouseEvent(RemoteMouseEvent(MouseAction.SCROLL_UP))
                 }
             )
-
             DockActionButton(
                 label = if (isFullscreen) "Réduire" else "Plein Écran",
                 icon = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
@@ -380,7 +366,7 @@ fun RemoteDesktopScreen(
 @Composable
 private fun DockActionButton(
     label: String,
-    icon: ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     isSelected: Boolean = false,
     onClick: () -> Unit
 ) {

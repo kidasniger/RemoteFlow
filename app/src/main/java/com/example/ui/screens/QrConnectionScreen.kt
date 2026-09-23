@@ -2,9 +2,11 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.view.ViewGroup
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -14,7 +16,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,7 +50,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -72,6 +73,12 @@ import com.example.ui.theme.SurfaceLight
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.google.mlkit.vision.barcode.Barcode
+import com.google.mlkit.vision.barcode.BarcodeScanner
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import java.util.concurrent.Executors
 
 @Composable
 fun QrConnectionScreen(
@@ -83,18 +90,40 @@ fun QrConnectionScreen(
     val connectionState by remoteClient.connectionState.collectAsState()
 
     var showManualDialog by remember { mutableStateOf(false) }
-    var manualCodeInput by remember { mutableStateOf("192.168.1.15:8443") }
+    var manualCodeInput by remember { mutableStateOf("") }
+    var pairPin by remember { mutableStateOf("") }
+    var scanLocked by remember { mutableStateOf(false) }
 
     var hasCameraPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
         )
     }
 
+    val scannerOptions = remember {
+        BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+    }
+    val scanner: BarcodeScanner = remember {
+        BarcodeScanning.getClient(scannerOptions)
+    }
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            scanner.close()
+            analysisExecutor.shutdown()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -107,18 +136,22 @@ fun QrConnectionScreen(
         if (connectionState is ConnectionState.Connected) {
             onConnected()
         }
+        if (connectionState is ConnectionState.Disconnected ||
+            connectionState is ConnectionState.Failed
+        ) {
+            scanLocked = false
+        }
     }
 
-    // Laser scan animation
-    val infiniteTransition = rememberInfiniteTransition(label = "scanner")
-    val scanYProgress by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.85f,
+    val transition = rememberInfiniteTransition(label = "qr_scan")
+    val scanProgress by transition.animateFloat(
+        initialValue = 0.1f,
+        targetValue = 0.9f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
+            animation = tween(1800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "scan_laser"
+        label = "qr_line"
     )
 
     Column(
@@ -127,20 +160,18 @@ fun QrConnectionScreen(
             .background(Color.White)
             .testTag("qr_connection_screen")
     ) {
-        // Top Brand Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .border(width = 1.dp, color = BorderLight)
+                .border(1.dp, BorderLight)
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.remoteflow_app_icon_1790042238116),
+            androidx.compose.foundation.Image(
+                painter = painterResource(R.drawable.remoteflow_app_icon_1790042238116),
                 contentDescription = "Logo",
-                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(28.dp)
                     .clip(RoundedCornerShape(8.dp))
@@ -154,7 +185,6 @@ fun QrConnectionScreen(
             )
         }
 
-        // Body Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -170,132 +200,163 @@ fun QrConnectionScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Scannez le QR affiché sur l'application PC RemoteFlow",
+                    text = "Le QR du PC contient aussi son empreinte TLS.",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
-
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Scanner Viewfinder Container
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(300.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(DarkNavy)
-                        .testTag("qr_viewfinder_box"),
-                    contentAlignment = Alignment.Center
+                        .testTag("qr_viewfinder_box")
                 ) {
                     if (hasCameraPermission) {
                         AndroidView(
                             factory = { ctx ->
-                                val previewView = PreviewView(ctx)
-                                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                                cameraProviderFuture.addListener({
-                                    val cameraProvider = cameraProviderFuture.get()
-                                    val preview = Preview.Builder().build().also {
-                                        it.surfaceProvider = previewView.surfaceProvider
+                                val previewView = PreviewView(ctx).apply {
+                                    layoutParams = ViewGroup.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                }
+
+                                val future = ProcessCameraProvider.getInstance(ctx)
+                                future.addListener({
+                                    val provider = future.get()
+                                    val preview = Preview.Builder()
+                                        .build()
+                                        .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+
+                                    val analysis = ImageAnalysis.Builder()
+                                        .setBackpressureStrategy(
+                                            ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+                                        )
+                                        .build()
+
+                                    analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                                        val mediaImage = imageProxy.image
+                                        if (mediaImage == null) {
+                                            imageProxy.close()
+                                            return@setAnalyzer
+                                        }
+
+                                        val inputImage = InputImage.fromMediaImage(
+                                            mediaImage,
+                                            imageProxy.imageInfo.rotationDegrees
+                                        )
+
+                                        scanner.process(inputImage)
+                                            .addOnSuccessListener { codes ->
+                                                if (scanLocked) return@addOnSuccessListener
+                                                val value = codes
+                                                    .firstOrNull {
+                                                        it.format == Barcode.FORMAT_QR_CODE
+                                                    }
+                                                    ?.rawValue
+                                                    ?.trim()
+                                                    ?: return@addOnSuccessListener
+
+                                                scanLocked = true
+                                                remoteClient.connectWithQr(value)
+                                            }
+                                            .addOnCompleteListener {
+                                                imageProxy.close()
+                                            }
                                     }
+
                                     try {
-                                        cameraProvider.unbindAll()
-                                        cameraProvider.bindToLifecycle(
+                                        provider.unbindAll()
+                                        provider.bindToLifecycle(
                                             lifecycleOwner,
                                             CameraSelector.DEFAULT_BACK_CAMERA,
-                                            preview
+                                            preview,
+                                            analysis
                                         )
-                                    } catch (_: Exception) {}
+                                    } catch (_: Exception) {
+                                    }
                                 }, ContextCompat.getMainExecutor(ctx))
+
                                 previewView
                             },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
 
-                    // Frame Overlay
                     Box(
-                        modifier = Modifier.size(190.dp)
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(190.dp)
                     ) {
-                        // Corner brackets
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopStart)
                                 .size(24.dp)
-                                .border(width = 3.dp, color = SecondaryCyan, shape = RoundedCornerShape(topStart = 8.dp))
+                                .border(3.dp, SecondaryCyan, RoundedCornerShape(topStart = 8.dp))
                         )
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .size(24.dp)
-                                .border(width = 3.dp, color = SecondaryCyan, shape = RoundedCornerShape(topEnd = 8.dp))
+                                .border(3.dp, SecondaryCyan, RoundedCornerShape(topEnd = 8.dp))
                         )
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
                                 .size(24.dp)
-                                .border(width = 3.dp, color = SecondaryCyan, shape = RoundedCornerShape(bottomStart = 8.dp))
+                                .border(3.dp, SecondaryCyan, RoundedCornerShape(bottomStart = 8.dp))
                         )
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
                                 .size(24.dp)
-                                .border(width = 3.dp, color = SecondaryCyan, shape = RoundedCornerShape(bottomEnd = 8.dp))
+                                .border(3.dp, SecondaryCyan, RoundedCornerShape(bottomEnd = 8.dp))
                         )
-
-                        // Center frosted target
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(130.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = 0.05f))
-                        )
-
-                        // Animated Laser
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = (scanYProgress * 190).dp)
-                                .height(2.5.dp)
+                                .padding(top = (scanProgress * 190).dp)
+                                .height(2.dp)
                                 .shadow(8.dp, spotColor = SecondaryCyan)
                                 .background(SecondaryCyan)
                         )
                     }
 
-                    // Scanner status overlay when connecting
                     if (connectionState is ConnectionState.Connecting) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(DarkNavy.copy(alpha = 0.85f)),
+                                .background(DarkNavy.copy(alpha = 0.82f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = SecondaryCyan, modifier = Modifier.size(36.dp))
-                                Spacer(modifier = Modifier.height(12.dp))
+                                CircularProgressIndicator(
+                                    color = SecondaryCyan,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = "Connexion réseau au PC...",
+                                    text = "Connexion TLS sécurisée…",
                                     color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
+                                    fontSize = 12.sp
                                 )
                             }
                         }
                     }
 
-                    // Bottom instruction text
                     Text(
-                        text = "Visez le code QR ou saisissez l'IP du PC ci-dessous",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Medium,
+                        text = "Scannez le QR du PC ou utilisez l'entrée manuelle",
+                        color = Color.White.copy(alpha = 0.82f),
+                        fontSize = 10.sp,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 14.dp)
+                            .padding(bottom = 12.dp)
                     )
                 }
 
-                // Connection state message
                 when (val state = connectionState) {
                     is ConnectionState.Connected -> {
                         Spacer(modifier = Modifier.height(14.dp))
@@ -307,15 +368,28 @@ fun QrConnectionScreen(
                                 .background(SecondaryCyan.copy(alpha = 0.12f))
                                 .padding(12.dp)
                         ) {
-                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(StatusConnected))
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(StatusConnected)
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "PC connecté : ${state.device.name} (${state.device.latencyMs} ms)",
+                                text = "PC connecté • TLS actif • " + state.device.latencyMs + " ms",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary
                             )
                         }
+                    }
+                    is ConnectionState.PairingRequired -> {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "TLS vérifié. Entrez maintenant le PIN affiché par Windows.",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
                     }
                     is ConnectionState.Failed -> {
                         Spacer(modifier = Modifier.height(14.dp))
@@ -325,11 +399,10 @@ fun QrConnectionScreen(
                             color = Color(0xFFEF4444)
                         )
                     }
-                    else -> {}
+                    else -> Unit
                 }
             }
 
-            // Bottom Buttons
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -367,11 +440,17 @@ fun QrConnectionScreen(
     if (showManualDialog) {
         AlertDialog(
             onDismissRequest = { showManualDialog = false },
-            title = { Text(text = "Connexion IP directe", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            title = {
+                Text(
+                    text = "Connexion IP directe",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
             text = {
                 Column {
                     Text(
-                        text = "Saisissez l'adresse IP et le port du PC (ex. 192.168.1.15:8443) :",
+                        text = "Exemple : 192.168.1.15:8443",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
@@ -387,6 +466,7 @@ fun QrConnectionScreen(
             },
             confirmButton = {
                 TextButton(
+                    enabled = manualCodeInput.isNotBlank(),
                     onClick = {
                         showManualDialog = false
                         remoteClient.connectManual(manualCodeInput)
@@ -397,6 +477,51 @@ fun QrConnectionScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showManualDialog = false }) {
+                    Text("Annuler", color = TextMuted)
+                }
+            }
+        )
+    }
+
+    if (connectionState is ConnectionState.PairingRequired) {
+        val state = connectionState as ConnectionState.PairingRequired
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text("Appairage du PC", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "PIN demandé : " + state.pinLength + " chiffres.",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = pairPin,
+                        onValueChange = {
+                            pairPin = it.filter(Char::isDigit).take(state.pinLength)
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("PIN Windows") }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = pairPin.length == state.pinLength,
+                    onClick = {
+                        remoteClient.pair(pairPin)
+                        pairPin = ""
+                    }
+                ) {
+                    Text("Appairer", color = PrimaryBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { remoteClient.disconnect() }) {
                     Text("Annuler", color = TextMuted)
                 }
             }

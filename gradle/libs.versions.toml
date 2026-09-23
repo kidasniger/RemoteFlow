@@ -29,6 +29,7 @@ cameraCamera2 = "1.5.0"
 cameraLifecycle = "1.5.0"
 cameraView = "1.5.0"
 cameraCore = "1.5.0"
+mlkitBarcodeScanning = "17.3.0"
 loggingInterceptor = "4.10.0"
 okhttp = "4.10.0"
 moshiKotlin = "1.15.2"
@@ -79,6 +80,7 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraCamera2" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraLifecycle" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraView" }
+mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcodeScanning" }
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraCore" }
 logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "loggingInterceptor" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }

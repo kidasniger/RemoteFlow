@@ -4,13 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import com.example.clipboard.ClipboardSyncManager
+import com.example.domain.model.ConnectionState
 import com.example.files.FileManager
 import com.example.macros.MacroRepository
 import com.example.navigation.RemoteFlowNavHost
@@ -35,7 +36,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         settingsManager = SettingsManager(this)
-        remoteClient = DefaultRemotePcClient()
+        remoteClient = DefaultRemotePcClient(this)
         gyroManager = GyroscopeManager(this)
         clipboardManager = ClipboardSyncManager(this)
         fileManager = FileManager(this, remoteClient)
@@ -59,6 +60,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        lifecycleScope.launch {
+            remoteClient.connectionState.collectLatest { state ->
+                if (state is ConnectionState.Connected) {
+                    fileManager.refreshPcFiles()
+                }
+            }
+        }
+
         setContent {
             val userSettings by settingsManager.settings.collectAsState()
 
@@ -78,9 +87,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        remoteClient.disconnect()
         gyroManager.stop()
         clipboardManager.cleanup()
+        super.onDestroy()
     }
 }
-

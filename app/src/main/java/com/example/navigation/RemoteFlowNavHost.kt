@@ -51,7 +51,6 @@ fun RemoteFlowNavHost(
                 }
             )
         }
-
         composable(Screen.OnboardingControl.route) {
             OnboardingControlScreen(
                 onNext = { navController.navigate(Screen.OnboardingShare.route) },
@@ -62,7 +61,6 @@ fun RemoteFlowNavHost(
                 }
             )
         }
-
         composable(Screen.OnboardingShare.route) {
             OnboardingShareScreen(
                 onStart = {
@@ -72,7 +70,6 @@ fun RemoteFlowNavHost(
                 }
             )
         }
-
         composable(Screen.QrConnection.route) {
             QrConnectionScreen(
                 remoteClient = remoteClient,
@@ -83,16 +80,12 @@ fun RemoteFlowNavHost(
                 }
             )
         }
-
         composable(Screen.Dashboard.route) {
             DashboardScreen(
                 remoteClient = remoteClient,
-                onNavigateTo = { route ->
-                    navController.navigate(route)
-                }
+                onNavigateTo = { route -> navController.navigate(route) }
             )
         }
-
         composable(Screen.RemoteDesktop.route) {
             RemoteDesktopScreen(
                 remoteClient = remoteClient,
@@ -100,21 +93,18 @@ fun RemoteFlowNavHost(
                 onOpenKeyboard = { navController.navigate(Screen.Keyboard.route) }
             )
         }
-
         composable(Screen.FileSharing.route) {
             FileSharingScreen(
                 fileManager = fileManager,
                 onBackClick = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Whiteboard.route) {
             WhiteboardScreen(
                 remoteClient = remoteClient,
                 onBackClick = { navController.popBackStack() }
             )
         }
-
         composable(Screen.GyroMouse.route) {
             GyroMouseScreen(
                 gyroManager = gyroManager,
@@ -122,27 +112,24 @@ fun RemoteFlowNavHost(
                 onBackClick = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Macros.route) {
             MacrosScreen(
                 macroRepository = macroRepository,
                 onBackClick = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Webcam.route) {
             WebcamScreen(
+                remoteClient = remoteClient,
                 onBackClick = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Keyboard.route) {
             KeyboardScreen(
                 remoteClient = remoteClient,
                 onBackClick = { navController.popBackStack() }
             )
         }
-
         composable(Screen.Settings.route) {
             SettingsScreen(
                 settingsManager = settingsManager,

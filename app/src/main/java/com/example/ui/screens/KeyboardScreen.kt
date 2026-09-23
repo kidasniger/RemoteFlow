@@ -44,11 +44,28 @@ fun KeyboardScreen(
     onBackClick: () -> Unit
 ) {
     var textBuffer by remember { mutableStateOf("") }
+    var modifiers by remember { mutableStateOf(setOf<String>()) }
 
-    val row1 = listOf("Esc", "Tab", "Ctrl", "Alt", "Win", "Del")
-    val row2 = listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P")
-    val row3 = listOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
-    val row4 = listOf("Shift", "Z", "X", "C", "V", "B", "N", "M", "⌫")
+    val modifierKeys = setOf("Ctrl", "Alt", "Win", "Shift")
+
+    fun sendKey(key: String, special: Boolean = false) {
+        val chord = if (modifiers.isEmpty()) null
+        else (modifiers.toList() + key).joinToString("+")
+        if (!special && key.length == 1) {
+            textBuffer += key
+        }
+        if (key == "Space") {
+            textBuffer += " "
+        }
+        remoteClient.sendKeyEvent(
+            RemoteKeyEvent(
+                keyLabel = key,
+                isSpecial = special,
+                chord = chord
+            )
+        )
+        modifiers = emptySet()
+    }
 
     Column(
         modifier = Modifier
@@ -56,7 +73,6 @@ fun KeyboardScreen(
             .background(DarkSlate)
             .testTag("keyboard_screen")
     ) {
-        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -75,8 +91,7 @@ fun KeyboardScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Retour",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    tint = Color.White
                 )
             }
             Spacer(modifier = Modifier.size(8.dp))
@@ -88,7 +103,6 @@ fun KeyboardScreen(
             )
         }
 
-        // Live Typed Preview Box
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -96,19 +110,34 @@ fun KeyboardScreen(
                 .height(80.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(DarkNavy)
-                .padding(12.dp),
-            contentAlignment = Alignment.TopStart
+                .padding(12.dp)
         ) {
             Column {
                 Text(
-                    text = "Aperçu de la frappe en temps réel :",
-                    color = Color.White.copy(alpha = 0.5f),
+                    text = if (modifiers.isEmpty()) {
+                        "Frappe PC"
+                    } else {
+                        "Modificateurs : " + modifiers.joinToString(" + ")
+                    },
+                    color = if (modifiers.isEmpty()) {
+                        Color.White.copy(alpha = 0.5f)
+                    } else {
+                        SecondaryCyan
+                    },
                     fontSize = 11.sp
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = if (textBuffer.isEmpty()) "Tapez sur les touches ci-dessous..." else textBuffer,
-                    color = if (textBuffer.isEmpty()) Color.White.copy(alpha = 0.3f) else SecondaryCyan,
+                    text = if (textBuffer.isEmpty()) {
+                        "Appuyez sur une touche…"
+                    } else {
+                        textBuffer.takeLast(120)
+                    },
+                    color = if (textBuffer.isEmpty()) {
+                        Color.White.copy(alpha = 0.3f)
+                    } else {
+                        SecondaryCyan
+                    },
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -117,7 +146,6 @@ fun KeyboardScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Virtual Keyboard Keys Layout
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -125,81 +153,88 @@ fun KeyboardScreen(
                 .padding(horizontal = 8.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Function & Modifiers row
+            val firstRow = listOf("Esc", "Tab", "Ctrl", "Alt", "Win", "Del")
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                row1.forEach { key ->
+                firstRow.forEach { key ->
+                    val isModifier = key in modifierKeys
                     KeyCap(
                         label = key,
                         modifier = Modifier.weight(1f),
-                        isModifier = true,
+                        isModifier = isModifier,
+                        selected = isModifier && modifiers.contains(key),
                         onClick = {
-                            remoteClient.sendKeyEvent(RemoteKeyEvent(key, isModifier = true))
-                        }
-                    )
-                }
-            }
-
-            // Row 2
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                row2.forEach { key ->
-                    KeyCap(
-                        label = key,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            textBuffer += key
-                            remoteClient.sendKeyEvent(RemoteKeyEvent(key))
-                        }
-                    )
-                }
-            }
-
-            // Row 3
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                row3.forEach { key ->
-                    KeyCap(
-                        label = key,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            textBuffer += key
-                            remoteClient.sendKeyEvent(RemoteKeyEvent(key))
-                        }
-                    )
-                }
-            }
-
-            // Row 4
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                row4.forEach { key ->
-                    val isBack = key == "⌫"
-                    KeyCap(
-                        label = key,
-                        modifier = Modifier.weight(if (key == "Shift" || isBack) 1.5f else 1f),
-                        isModifier = key == "Shift" || isBack,
-                        onClick = {
-                            if (isBack) {
-                                if (textBuffer.isNotEmpty()) textBuffer = textBuffer.dropLast(1)
-                                remoteClient.sendKeyEvent(RemoteKeyEvent("Backspace", isSpecial = true))
+                            if (isModifier) {
+                                modifiers = if (modifiers.contains(key)) {
+                                    modifiers - key
+                                } else {
+                                    modifiers + key
+                                }
                             } else {
-                                remoteClient.sendKeyEvent(RemoteKeyEvent(key))
+                                sendKey(
+                                    key,
+                                    special = key == "Esc" || key == "Tab" || key == "Del"
+                                )
                             }
                         }
                     )
                 }
             }
 
-            // Bottom Space & Enter Row
+            listOf(
+                listOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"),
+                listOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
+            ).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    row.forEach { key ->
+                        KeyCap(
+                            label = key,
+                            modifier = Modifier.weight(1f),
+                            onClick = { sendKey(key) }
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                KeyCap(
+                    label = "Shift",
+                    modifier = Modifier.weight(1.5f),
+                    isModifier = true,
+                    selected = modifiers.contains("Shift"),
+                    onClick = {
+                        modifiers = if (modifiers.contains("Shift")) {
+                            modifiers - "Shift"
+                        } else {
+                            modifiers + "Shift"
+                        }
+                    }
+                )
+                listOf("Z", "X", "C", "V", "B", "N", "M").forEach { key ->
+                    KeyCap(
+                        label = key,
+                        modifier = Modifier.weight(1f),
+                        onClick = { sendKey(key) }
+                    )
+                }
+                KeyCap(
+                    label = "⌫",
+                    modifier = Modifier.weight(1.5f),
+                    onClick = {
+                        if (textBuffer.isNotEmpty()) textBuffer = textBuffer.dropLast(1)
+                        sendKey("Backspace", special = true)
+                    }
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -207,18 +242,16 @@ fun KeyboardScreen(
                 KeyCap(
                     label = "Espace",
                     modifier = Modifier.weight(3f),
-                    onClick = {
-                        textBuffer += " "
-                        remoteClient.sendKeyEvent(RemoteKeyEvent("Space"))
-                    }
+                    onClick = { sendKey("Space", special = true) }
                 )
                 KeyCap(
                     label = "Entrée ↵",
                     modifier = Modifier.weight(1.5f),
                     isAccent = true,
                     onClick = {
-                        textBuffer += "\n"
-                        remoteClient.sendKeyEvent(RemoteKeyEvent("Enter", isSpecial = true))
+                        textBuffer += "
+"
+                        sendKey("Enter", special = true)
                     }
                 )
             }
@@ -229,13 +262,15 @@ fun KeyboardScreen(
 @Composable
 private fun KeyCap(
     label: String,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
     isModifier: Boolean = false,
+    selected: Boolean = false,
     isAccent: Boolean = false,
     onClick: () -> Unit
 ) {
-    val bgColor = when {
+    val backgroundColor = when {
         isAccent -> PrimaryBlue
+        selected -> SecondaryCyan.copy(alpha = 0.65f)
         isModifier -> Color(0xFF334155)
         else -> Color(0xFF1E293B)
     }
@@ -244,7 +279,7 @@ private fun KeyCap(
         modifier = modifier
             .height(42.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(bgColor)
+            .background(backgroundColor)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

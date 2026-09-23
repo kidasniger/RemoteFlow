@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.domain.model.ConnectionState
 import com.example.network.RemotePcClient
 import com.example.settings.SettingsManager
@@ -68,10 +69,14 @@ fun SettingsScreen(
 ) {
     val settings by settingsManager.settings.collectAsState()
     val connectionState by remoteClient.connectionState.collectAsState()
-
     var showQualityDialog by remember { mutableStateOf(false) }
 
-    val qualityOptions = listOf("Auto • 60fps", "1080p • 60fps", "720p • 30fps", "Faible latence (Jeux)")
+    val qualityOptions = listOf(
+        "Auto • 60fps",
+        "1080p • 60fps",
+        "720p • 30fps",
+        "Faible latence (Jeux)"
+    )
 
     Column(
         modifier = Modifier
@@ -79,7 +84,6 @@ fun SettingsScreen(
             .background(SurfaceLight)
             .testTag("settings_screen")
     ) {
-        // Top Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -99,8 +103,7 @@ fun SettingsScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Retour",
-                    tint = TextPrimary,
-                    modifier = Modifier.size(20.dp)
+                    tint = TextPrimary
                 )
             }
             Spacer(modifier = Modifier.width(6.dp))
@@ -119,11 +122,10 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Connected Device Card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(4.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.05f))
+                    .shadow(4.dp, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .border(1.dp, BorderLight, RoundedCornerShape(16.dp))
@@ -145,29 +147,31 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Default.Computer,
                                 contentDescription = "PC",
-                                tint = SecondaryCyan,
-                                modifier = Modifier.size(24.dp)
+                                tint = SecondaryCyan
                             )
                         }
-
                         Spacer(modifier = Modifier.width(12.dp))
-
                         Column {
-                            val deviceName = if (connectionState is ConnectionState.Connected) {
-                                (connectionState as ConnectionState.Connected).device.name
-                            } else "PC Connecté"
                             Text(
-                                text = deviceName,
+                                text = if (connectionState is ConnectionState.Connected) {
+                                    (connectionState as ConnectionState.Connected).device.name
+                                } else {
+                                    "PC RemoteFlow"
+                                },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Wi-Fi 5GHz • Latence 4ms",
+                                text = if (connectionState is ConnectionState.Connected) {
+                                    "TLS actif • " +
+                                        (connectionState as ConnectionState.Connected).device.latencyMs +
+                                        " ms"
+                                } else {
+                                    "Aucun PC connecté"
+                                },
                                 fontSize = 11.sp,
-                                color = StatusConnected,
-                                fontWeight = FontWeight.Medium
+                                color = StatusConnected
                             )
                         }
                     }
@@ -188,36 +192,27 @@ fun SettingsScreen(
                 }
             }
 
-            // Group: General Settings
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(3.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.04f))
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .border(1.dp, BorderLight, RoundedCornerShape(16.dp))
             ) {
-                // Notifications switch
                 SettingSwitchRow(
                     title = "Notifications",
                     subtitle = "Alertes de transfert et notifications PC",
                     checked = settings.notifications,
                     onCheckedChange = { settingsManager.updateNotifications(it) }
                 )
-
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderLight))
-
-                // Universal Clipboard
                 SettingSwitchRow(
                     title = "Presse-papiers universel",
                     subtitle = "Synchronisation automatique texte et liens",
                     checked = settings.universalClipboard,
                     onCheckedChange = { settingsManager.updateUniversalClipboard(it) }
                 )
-
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderLight))
-
-                // Dark Theme
                 SettingSwitchRow(
                     title = "Mode Sombre",
                     subtitle = "Apparence assombrie de l'interface",
@@ -226,37 +221,28 @@ fun SettingsScreen(
                 )
             }
 
-            // Group: Advanced & Security
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(3.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.04f))
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .border(1.dp, BorderLight, RoundedCornerShape(16.dp))
             ) {
-                // Streaming Quality
                 SettingActionRow(
                     title = "Qualité Streaming",
                     value = settings.streamingQuality,
                     onClick = { showQualityDialog = true }
                 )
-
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderLight))
-
-                // End-to-End Security
                 SettingActionRow(
-                    title = "Sécurité Bout en Bout",
-                    value = if (settings.e2eSecurity) "Activé (AES-256)" else "Désactivé",
-                    onClick = { settingsManager.updateSecurity(!settings.e2eSecurity) }
+                    title = "Sécurité réseau",
+                    value = "TLS 1.2+ • empreinte QR • PIN",
+                    onClick = {}
                 )
-
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderLight))
-
-                // Version Info
                 SettingActionRow(
                     title = "Version RemoteFlow",
-                    value = "v1.0.0 (Native Android)",
+                    value = "v" + BuildConfig.VERSION_NAME,
                     onClick = {}
                 )
             }
@@ -281,14 +267,14 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = (option == settings.streamingQuality),
+                                selected = option == settings.streamingQuality,
                                 onClick = {
                                     settingsManager.updateStreamingQuality(option)
                                     showQualityDialog = false
                                 }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = option, fontSize = 13.sp)
+                            Text(option, fontSize = 13.sp)
                         }
                     }
                 }
@@ -317,7 +303,12 @@ private fun SettingSwitchRow(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary
+            )
             Spacer(modifier = Modifier.height(2.dp))
             Text(text = subtitle, fontSize = 10.5.sp, color = TextSecondary)
         }
@@ -348,7 +339,12 @@ private fun SettingActionRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        Text(
+            text = title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = TextPrimary
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(text = value, fontSize = 11.5.sp, color = TextMuted)
             Spacer(modifier = Modifier.width(6.dp))
