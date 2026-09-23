@@ -114,7 +114,8 @@ public sealed class PairingManager
             Convert.ToBase64String(signature),
             PairingEnforced,
             PinLength,
-            "tls1.2+/p256+pin");
+            "tls1.2+/p256+pin",
+            TlsFingerprint);
     }
 
     public bool VerifyPin(string? pin)
