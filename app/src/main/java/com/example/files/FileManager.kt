@@ -69,7 +69,11 @@ class FileManager(
 
     private fun loadLocalAppFiles() {
         val filesDir = context.getExternalFilesDir(null) ?: context.filesDir
-        val files = filesDir.listFiles()?.filter { it.isFile } ?: emptyList()
+        val files = filesDir.walkTopDown()
+            .filter { it.isFile }
+            .filter { !it.name.endsWith(".rfpart", ignoreCase = true) }
+            .toList()
+
         _phoneFiles.value = files.map { file ->
             SharedFile(
                 id = UUID.nameUUIDFromBytes(file.absolutePath.toByteArray()).toString(),
@@ -156,9 +160,29 @@ class FileManager(
                 for (file in selected) {
                     val client = remoteClient ?: throw IllegalStateException("PC non connecté")
                     val uri = file.uri ?: continue
-                    val size = file.sizeBytes.coerceAtLeast(0L)
                     val id = "android-up-" + UUID.randomUUID()
+                    var temporaryFile: File? = null
 
+                    val source: Pair<Long, java.io.InputStream> = if (file.sizeBytes > 0L) {
+                        file.sizeBytes to (
+                            context.contentResolver.openInputStream(uri)
+                                ?: throw IllegalStateException("Lecture impossible : " + file.name)
+                        )
+                    } else {
+                        val cached = File(
+                            context.cacheDir,
+                            "remoteflow-upload-" + UUID.randomUUID() + ".part"
+                        )
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                cached.outputStream().use { output -> input.copyTo(output) }
+                            } ?: throw IllegalStateException("Lecture impossible : " + file.name)
+                        }
+                        temporaryFile = cached
+                        cached.length() to cached.inputStream()
+                    }
+
+                    val size = source.first
                     client.sendFileCommand(
                         type = "UPLOAD_START",
                         transferId = id,
@@ -167,7 +191,7 @@ class FileManager(
                         offset = 0
                     )
 
-                    context.contentResolver.openInputStream(uri)?.use { input ->
+                    source.second.use { input ->
                         val buffer = ByteArray(CHUNK_SIZE)
                         var offset = 0L
 
@@ -190,16 +214,19 @@ class FileManager(
                             offset += read
                             sent += read
                             _transferProgress.emit(
-                                (sent.toFloat() / total).coerceIn(0f, 1f)
+                                (sent.toFloat() / total.coerceAtLeast(size))
+                                    .coerceIn(0f, 1f)
                             )
                         }
-                    } ?: throw IllegalStateException("Lecture impossible : " + file.name)
+                    }
 
                     client.sendFileCommand(
                         type = "UPLOAD_END",
                         transferId = id,
                         offset = size
                     )
+
+                    temporaryFile?.delete()
                 }
 
                 withContext(Dispatchers.Main) {
