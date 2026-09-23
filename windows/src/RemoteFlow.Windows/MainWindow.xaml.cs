@@ -98,11 +98,11 @@ public partial class MainWindow : Window
         PairingAddress.Text = payload;
         PairingPin.Text = _core.Pairing.CurrentPin;
         PairingDeviceId.Text = _core.Pairing.DeviceId;
-        PairingFingerprint.Text = _core.Pairing.Fingerprint;
-        PairingSecurityState.Text = $"Identité persistante • {_core.Pairing.PairedDeviceCount} appareil(s) appairé(s)";
+        PairingFingerprint.Text = _core.Pairing.TlsFingerprint;
+        PairingSecurityState.Text = $"TLS chiffré • {_core.Pairing.PairedDeviceCount} appareil(s) appairé(s) • empreinte liée au QR";
         PairingCompatibilityState.Text = _core.Pairing.PairingEnforced
-            ? "Verrouillage actif : seuls les appareils appairés peuvent envoyer des commandes."
-            : "Compatibilité actuelle : le client Android v1 n’envoie pas encore l’étape pair/PIN ; le verrouillage reste désactivé par défaut.";
+            ? "Verrouillage actif : le contrôle nécessite le PIN RemoteFlow après la connexion TLS."
+            : "TLS reste actif même lorsque le verrouillage par PIN est désactivé.";
         DashboardPairingAddress.Text = payload;
         DashboardPairingPin.Text = $"PIN : {_core.Pairing.CurrentPin}";
     }
@@ -1448,7 +1448,7 @@ public partial class MainWindow : Window
         {
             WindowsStartupManager.SetEnabled(false);
             _core.Settings.Reset();
-            _core.Pairing.SetPairingEnforced(false);
+            _core.Pairing.SetPairingEnforced(true);
             _core.Server.SetClipboardSyncEnabled(true);
 
             SettingsStatusText.Text = "Réinitialisation en cours…";

@@ -1,5 +1,7 @@
 #define MyAppName "RemoteFlow"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+#define MyAppVersion "1.0.1"
+#endif
 #define MyAppPublisher "RemoteFlow"
 #define MyAppExeName "RemoteFlow.exe"
 [Setup]

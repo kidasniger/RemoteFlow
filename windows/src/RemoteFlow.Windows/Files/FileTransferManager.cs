@@ -122,10 +122,22 @@ public sealed class FileTransferManager
 
             if (size < 0)
                 throw new InvalidDataException("Taille de fichier invalide.");
+            if (size > RemoteFlowSecurityPolicy.MaxFileSizeBytes)
+                throw new InvalidDataException("Fichier trop volumineux (maximum 4 Go).");
 
             var finalPath = ResolveSafePath(fileName);
             var partPath = finalPath + ".rfpart";
             Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+
+            var rootDrive = Path.GetPathRoot(_rootPath);
+            if (!string.IsNullOrWhiteSpace(rootDrive))
+            {
+                var drive = new DriveInfo(rootDrive);
+                var existingPart = File.Exists(partPath) ? new FileInfo(partPath).Length : 0L;
+                var requiredFree = Math.Max(0L, size - existingPart);
+                if (drive.AvailableFreeSpace < requiredFree)
+                    throw new IOException("Espace disque insuffisant pour ce transfert.");
+            }
 
             CancelUploadInternal(transferId);
 

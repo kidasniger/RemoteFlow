@@ -1,6 +1,8 @@
 using System.IO;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
 using RemoteFlow.Windows.Clipboard;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Security;
@@ -379,7 +381,35 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
         StatusChanged?.Invoke(this, $"Client connecté : {client.Client.RemoteEndPoint}");
 
-        await using var session = new JsonLineSession(client);
+        SslStream secureStream;
+        try
+        {
+            secureStream = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+            await secureStream.AuthenticateAsServerAsync(
+                new SslServerAuthenticationOptions
+                {
+                    ServerCertificate = _pairing.TlsCertificate,
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    ClientCertificateRequired = false,
+                    CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+                },
+                cancellationToken);
+        }
+        catch (AuthenticationException ex)
+        {
+            StatusChanged?.Invoke(this, $"Connexion TLS refusée : {ex.Message}");
+            try { client.Dispose(); } catch { }
+            Interlocked.Decrement(ref _activeConnections);
+            return;
+        }
+        catch (IOException)
+        {
+            try { client.Dispose(); } catch { }
+            Interlocked.Decrement(ref _activeConnections);
+            return;
+        }
+
+        await using var session = new JsonLineSession(client, secureStream);
         var sessionPaired = !_pairing.PairingEnforced;
         string? clientDeviceId = null;
         var clipboardSession = new ClipboardSession(session, () => sessionPaired);
@@ -1104,7 +1134,8 @@ public sealed class RemoteFlowServer : IAsyncDisposable
                 Signature: security.Signature,
                 PairingRequired: security.PairingRequired,
                 PinLength: security.PinLength,
-                Security: security.Security),
+                Security: security.Security,
+                TlsFingerprint: security.TlsFingerprint),
             cancellationToken);
     }
 
@@ -1242,6 +1273,13 @@ public sealed class RemoteFlowServer : IAsyncDisposable
 
     private static (bool ok, string? summary, string? error) ExecuteKeyboard(RemoteFlowMessage message)
     {
+        if (!string.IsNullOrWhiteSpace(message.Chord))
+        {
+            if (!WindowsKeyboardController.PressChord(message.Chord))
+                return (false, null, $"Combinaison clavier non reconnue : {message.Chord}");
+            return (true, BuildSummary(message), null);
+        }
+
         if (!WindowsKeyboardController.PressLabel(message.Key, message.Special == true, message.Modifier == true))
             return (false, null, $"Touche clavier non reconnue : {message.Key ?? "(vide)"}");
 

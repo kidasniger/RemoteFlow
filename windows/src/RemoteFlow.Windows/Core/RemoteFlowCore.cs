@@ -6,7 +6,7 @@ namespace RemoteFlow.Windows.Core;
 
 public sealed class RemoteFlowCore : IAsyncDisposable
 {
-    public string Version { get; } = "1.0.0";
+    public string Version { get; } = typeof(RemoteFlowCore).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
     public int PairingPort => Settings.Settings.TcpPort;
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
     public PairingManager Pairing { get; }
