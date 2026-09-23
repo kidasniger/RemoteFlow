@@ -249,8 +249,7 @@ fun KeyboardScreen(
                     modifier = Modifier.weight(1.5f),
                     isAccent = true,
                     onClick = {
-                        textBuffer += "
-"
+                        textBuffer += "\n"
                         sendKey("Enter", special = true)
                     }
                 )
