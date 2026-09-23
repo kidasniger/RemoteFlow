@@ -19,16 +19,24 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Restore
         run: dotnet restore windows/RemoteFlow.Windows.sln
+      - name: Compute version
+        shell: powershell
+        run: |
+          $version = "1.0.$env:GITHUB_RUN_NUMBER"
+          "WINDOWS_VERSION=$version" >> $env:GITHUB_ENV
+
       - name: Build
-        run: dotnet build windows/RemoteFlow.Windows.sln -c Release --no-restore
+        shell: powershell
+        run: dotnet build windows/RemoteFlow.Windows.sln -c Release --no-restore /p:Version=$env:WINDOWS_VERSION /p:AssemblyVersion=$env:WINDOWS_VERSION.0 /p:FileVersion=$env:WINDOWS_VERSION.0
       - name: Publish self-contained
-        run: dotnet publish windows/src/RemoteFlow.Windows/RemoteFlow.Windows.csproj -c Release -r win-x64 --self-contained true -o windows/publish
+        shell: powershell
+        run: dotnet publish windows/src/RemoteFlow.Windows/RemoteFlow.Windows.csproj -c Release -r win-x64 --self-contained true -o windows/publish /p:Version=$env:WINDOWS_VERSION /p:AssemblyVersion=$env:WINDOWS_VERSION.0 /p:FileVersion=$env:WINDOWS_VERSION.0
       - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup --yes --no-progress
       - name: Build installer
         shell: powershell
-        run: iscc windows/installer/RemoteFlow.iss
+        run: iscc /DMyAppVersion=$env:WINDOWS_VERSION windows/installer/RemoteFlow.iss
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -39,7 +47,7 @@ jobs:
       - name: Prepare release
         shell: powershell
         run: |
-          $tag = "v1.0.0-windows.$env:GITHUB_RUN_NUMBER"
+          $tag = "v$($env:WINDOWS_VERSION)-windows"
           "TAG=$tag" >> $env:GITHUB_ENV
       - name: Create tag
         shell: powershell
