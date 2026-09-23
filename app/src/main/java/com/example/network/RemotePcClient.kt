@@ -584,7 +584,11 @@ class DefaultRemotePcClient(
 
         if (pairingRequired) {
             _connectionState.value =
-                ConnectionState.PairingRequired(device, pinLength)
+                ConnectionState.PairingRequired(
+                    device = device,
+                    pinLength = pinLength,
+                    tlsFingerprint = actualTlsFingerprint
+                )
             _lastActionLog.value =
                 "Connexion TLS vérifiée • PIN RemoteFlow requis"
         } else {
