@@ -37,29 +37,38 @@ jobs:
           echo "VERSION_CODE=$((20000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
           echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Restore release signing key
+      - name: Detect Android release signing secrets
         shell: bash
         env:
           RELEASE_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 || secrets.KEYSTORE_BASE64 || secrets.RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          if [ -z "$RELEASE_KEYSTORE_B64" ]; then
-            echo "::error::Missing Android release keystore secret."
-            exit 1
-          fi
-          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > my-upload-key.jks
-          test -s my-upload-key.jks
-
-      - name: Validate release signing configuration
-        shell: bash
-        env:
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.KEY_PASSWORD }}
         run: |
-          test -n "$STORE_PASSWORD" || (echo "::error::Missing Android keystore password" && exit 1)
-          test -n "$KEY_ALIAS" || (echo "::error::Missing Android key alias" && exit 1)
-          test -n "$KEY_PASSWORD" || (echo "::error::Missing Android key password" && exit 1)
-          keytool -list -keystore my-upload-key.jks -storepass "$STORE_PASSWORD" >/dev/null
+          if [ -n "$RELEASE_KEYSTORE_B64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "HAS_RELEASE_KEY=true" >> "$GITHUB_ENV"
+            printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > my-upload-key.jks
+            test -s my-upload-key.jks
+            keytool -list -keystore my-upload-key.jks -storepass "$STORE_PASSWORD" >/dev/null
+            echo "Clé de release disponible."
+          else
+            echo "HAS_RELEASE_KEY=false" >> "$GITHUB_ENV"
+            echo "::warning::Clé de release absente : une APK debug installable sera publiée."
+          fi
+
+      - name: Prepare debug keystore
+        if: env.HAS_RELEASE_KEY != 'true'
+        shell: bash
+        run: |
+          keytool -genkeypair -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=RemoteFlow Debug,O=RemoteFlow,C=NE"
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -70,7 +79,14 @@ jobs:
           VERSION_NAME: ${{ env.VERSION_NAME }}
         run: ./gradlew testDebugUnitTest
 
-      - name: Assemble signed release
+      - name: Assemble debug installable APK
+        env:
+          VERSION_CODE: ${{ env.VERSION_CODE }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
+        run: ./gradlew assembleDebug
+
+      - name: Assemble signed release APK
+        if: env.HAS_RELEASE_KEY == 'true'
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.STORE_PASSWORD }}
@@ -80,17 +96,20 @@ jobs:
           VERSION_NAME: ${{ env.VERSION_NAME }}
         run: ./gradlew assembleRelease
 
-      - name: Verify release artifact
-        run: |
-          test -s app/build/outputs/apk/release/app-release.apk
-          apksigner verify --verbose app/build/outputs/apk/release/app-release.apk
-
-      - name: Prepare release APK
+      - name: Prepare installable APK
         shell: bash
         run: |
           mkdir -p release-apks
-          cp app/build/outputs/apk/release/app-release.apk "release-apks/RemoteFlow-v$VERSION_NAME-signed.apk"
-          sha256sum "release-apks/RemoteFlow-v$VERSION_NAME-signed.apk" | tee "release-apks/SHA256SUMS.txt"
+          if [ "$HAS_RELEASE_KEY" = "true" ]; then
+            test -s app/build/outputs/apk/release/app-release.apk
+            apksigner verify --verbose app/build/outputs/apk/release/app-release.apk
+            cp app/build/outputs/apk/release/app-release.apk "release-apks/RemoteFlow-v$VERSION_NAME-signed.apk"
+          else
+            test -s app/build/outputs/apk/debug/app-debug.apk
+            apksigner verify --verbose app/build/outputs/apk/debug/app-debug.apk
+            cp app/build/outputs/apk/debug/app-debug.apk "release-apks/RemoteFlow-v$VERSION_NAME-debug-installable.apk"
+          fi
+          sha256sum release-apks/*.apk | tee release-apks/SHA256SUMS.txt
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
