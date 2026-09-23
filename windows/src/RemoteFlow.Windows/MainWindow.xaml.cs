@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using System.Net.NetworkInformation;
 using RemoteFlow.Windows.Core;
 using RemoteFlow.Windows.Diagnostics;
 using RemoteFlow.Windows.Screen;
@@ -71,6 +72,8 @@ public partial class MainWindow : Window
         }
 
         Closed += MainWindow_Closed;
+        NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
+        NetworkChange.NetworkAvailabilityChanged += NetworkChange_NetworkAvailabilityChanged;
 
         RefreshPairingUi();
         RefreshActivityLog();
@@ -1606,6 +1609,27 @@ public partial class MainWindow : Window
             : "Serveur TCP arrêté";
     }
 
+    private void NetworkChange_NetworkAddressChanged(object? sender, EventArgs e) =>
+        RefreshPairingUiFromNetworkChange();
+
+    private void NetworkChange_NetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e) =>
+        RefreshPairingUiFromNetworkChange();
+
+    private void RefreshPairingUiFromNetworkChange()
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (IsVisible)
+            {
+                RefreshPairingUi();
+                SetConnectionStatus(
+                    _core.Server.IsRunning
+                        ? $"Réseau détecté • QR mis à jour • port {_core.PairingPort}"
+                        : "Réseau détecté • QR mis à jour");
+            }
+        }));
+    }
+
     private void CopyPairingAddress_Click(object sender, RoutedEventArgs e)
     {
         System.Windows.Clipboard.SetText(_core.Pairing.CreateQrPayload(_core.PairingPort));
@@ -1631,6 +1655,8 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
+        NetworkChange.NetworkAddressChanged -= NetworkChange_NetworkAddressChanged;
+        NetworkChange.NetworkAvailabilityChanged -= NetworkChange_NetworkAvailabilityChanged;
         _dashboardMetricsTimer.Stop();
         _activityLog.Dispose();
         try { await _core.Server.StopWebcamAsync(); } catch { }
