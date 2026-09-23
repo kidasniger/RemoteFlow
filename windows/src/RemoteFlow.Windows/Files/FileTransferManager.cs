@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Sockets;
 using RemoteFlow.Windows.Core;
+using RemoteFlow.Windows.Security;
 using RemoteFlow.Windows.Network;
 
 namespace RemoteFlow.Windows.Files;
