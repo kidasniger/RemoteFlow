@@ -37,25 +37,6 @@ jobs:
           echo "VERSION_CODE=$((20000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
           echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Restore stable debug keystore
-        shell: bash
-        env:
-          DEBUG_KEYSTORE_BASE64: \${{ secrets.DEBUG_KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
-            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 --decode > debug.keystore
-          else
-            keytool -genkeypair -v \
-              -keystore debug.keystore \
-              -alias androiddebugkey \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass android \
-              -keypass android \
-              -dname "CN=Android Debug,O=RemoteFlow,C=US"
-          fi
-
       - name: Restore release signing key
         shell: bash
         env:
