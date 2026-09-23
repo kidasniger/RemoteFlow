@@ -24,7 +24,6 @@ jobs:
         run: |
           $version = "1.0.$env:GITHUB_RUN_NUMBER"
           "WINDOWS_VERSION=$version" >> $env:GITHUB_ENV
-
       - name: Build
         shell: powershell
         run: dotnet build windows/RemoteFlow.Windows.sln -c Release --no-restore /p:Version=$env:WINDOWS_VERSION /p:AssemblyVersion=$env:WINDOWS_VERSION.0 /p:FileVersion=$env:WINDOWS_VERSION.0
