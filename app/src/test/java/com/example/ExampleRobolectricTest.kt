@@ -26,7 +26,8 @@ class ExampleRobolectricTest {
 
   @Test
   fun `verify macro repository default list`() {
-    val client = DefaultRemotePcClient()
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val client = DefaultRemotePcClient(context)
     val repo = MacroRepository(client)
     assertEquals(DefaultMacros.list.size, repo.macros.value.size)
   }
