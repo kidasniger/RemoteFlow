@@ -251,8 +251,8 @@ class FileManager(
                     val shared = SharedFile(
                         id = UUID.randomUUID().toString(),
                         name = local.name,
-                        sizeBytes = remote.sizeBytes,
-                        formattedSize = formatFileSize(remote.sizeBytes),
+                        sizeBytes = remote.size,
+                        formattedSize = formatFileSize(remote.size),
                         isLocal = true,
                         uri = Uri.fromFile(local),
                         status = TransferStatus.TRANSFERRING
@@ -264,7 +264,7 @@ class FileManager(
                             sharedFile = shared,
                             outputFile = local,
                             file = raf,
-                            totalBytes = remote.sizeBytes,
+                            totalBytes = remote.size,
                             completion = completion
                         )
                     }
