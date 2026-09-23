@@ -79,6 +79,7 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Composable
 fun QrConnectionScreen(
@@ -92,7 +93,7 @@ fun QrConnectionScreen(
     var showManualDialog by remember { mutableStateOf(false) }
     var manualCodeInput by remember { mutableStateOf("") }
     var pairPin by remember { mutableStateOf("") }
-    var scanLocked by remember { mutableStateOf(false) }
+    val scanLocked = remember { AtomicBoolean(false) }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -139,7 +140,7 @@ fun QrConnectionScreen(
         if (connectionState is ConnectionState.Disconnected ||
             connectionState is ConnectionState.Failed
         ) {
-            scanLocked = false
+            scanLocked.set(false)
         }
     }
 
@@ -251,7 +252,7 @@ fun QrConnectionScreen(
 
                                         scanner.process(inputImage)
                                             .addOnSuccessListener { codes ->
-                                                if (scanLocked) return@addOnSuccessListener
+                                                if (scanLocked.get()) return@addOnSuccessListener
                                                 val value = codes
                                                     .firstOrNull {
                                                         it.format == Barcode.FORMAT_QR_CODE
@@ -260,8 +261,9 @@ fun QrConnectionScreen(
                                                     ?.trim()
                                                     ?: return@addOnSuccessListener
 
-                                                scanLocked = true
-                                                remoteClient.connectWithQr(value)
+                                                if (scanLocked.compareAndSet(false, true)) {
+                                                    remoteClient.connectWithQr(value)
+                                                }
                                             }
                                             .addOnCompleteListener {
                                                 imageProxy.close()
