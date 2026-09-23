@@ -198,8 +198,7 @@ class FileManager(
                     client.sendFileCommand(
                         type = "UPLOAD_END",
                         transferId = id,
-                        offset = size,
-                        totalBytes = size
+                        offset = size
                     )
                 }
 
