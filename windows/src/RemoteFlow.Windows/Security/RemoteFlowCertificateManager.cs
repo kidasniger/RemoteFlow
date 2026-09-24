@@ -44,7 +44,7 @@ public sealed class RemoteFlowCertificateManager : IDisposable
                 return new X509Certificate2(
                     pfx,
                     string.Empty,
-                    X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
+                    X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.UserKeySet);
             }
             catch
             {
